@@ -1,0 +1,31 @@
+[project]
+name = "interaction-models"
+version = "0.1.0"
+description = "Spatial interaction and accessibility estimators over a demand-to-supply cost matrix"
+readme = "README.md"
+authors = [
+    { name = "Reece C Valentine", email = "reece.c.valentine@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "numpy>=2.5.2",
+    "pandas>=3.0.5",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.9",
+    "mkdocs>=1.6",
+    "mkdocs-material>=9.5",
+]
+
+[build-system]
+requires = ["uv_build>=0.12.3,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
