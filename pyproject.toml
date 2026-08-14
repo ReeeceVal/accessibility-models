@@ -6,10 +6,10 @@ readme = "README.md"
 authors = [
     { name = "Reece C Valentine", email = "reece.c.valentine@gmail.com" }
 ]
-requires-python = ">=3.13"
+requires-python = ">=3.10"
 dependencies = [
-    "numpy>=2.5.2",
-    "pandas>=3.0.5",
+    "numpy>=2.1",
+    "pandas>=2.2",
 ]
 
 [dependency-groups]
