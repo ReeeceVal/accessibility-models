@@ -37,7 +37,7 @@ im.sweep(prep, model, grid, *, modes=None, stats=None, **fixed)
 | Argument | Meaning |
 |---|---|
 | `prep` | built once, reused for every combination |
-| `model` | `"catchment"`, `"voronoi"`, `"ifca"`, `"sfca"`, or a model function |
+| `model` | `"catchment"`, `"voronoi"`, `"ifca"`, `"sfca"`, `"sfca_e"`, or a model function |
 | `grid` | `{key: [values]}` — the Cartesian product |
 | `modes` | the mode template that `"decay"` and `"kappa"` rewrite |
 | `stats` | stat groups; their keys become result columns |

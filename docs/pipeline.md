@@ -25,6 +25,11 @@ them at all:
 | [Voronoi](families/voronoi.md) | ✓ | reach gate only | — | — |
 | [iFCA](families/ifca.md) | ✓ | ✓ | ✓ | optional |
 | [3SFCA](families/sfca.md) | ✓ | ✓ | ✓ | required |
+| [MAC-3SFCA-E](families/sfca-e.md) | ✓ | ✓ | ✓ | required |
+
+MAC-3SFCA-E runs stage 6 like 3SFCA, but its `Φ_i` reads the largest `f_multi` in the
+choice set — which is the top-ranked one — so the **total** exposure it produces is the
+same for every `Q ≥ 1`. `Q` still decides how that total is split across sites.
 
 ## Filter, then rank
 

@@ -3,7 +3,7 @@
 A lean, environment-agnostic Python package computing spatial interaction and
 accessibility models over a demand → supply cost matrix.
 
-Four model families, each a single model whose optional terms switch on with the
+Five model families, each a single model whose optional terms switch on with the
 parameters that define them:
 
 | Family | What it does |
@@ -12,6 +12,7 @@ parameters that define them:
 | **Voronoi** | winner-take-all assignment to the nearest reachable site |
 | **iFCA** | sites compete for demand, weighted by crowdedness |
 | **3SFCA** | demand-side selection across a bounded choice set |
+| **MAC-3SFCA-E** | 3SFCA with an explicit participation step; monotone under site openings |
 
 Every family emits the same two outputs: `E_j`, the expected exposure of a supply point,
 and `A_i`, the accessibility of a demand node.
@@ -101,9 +102,17 @@ demand_id  demand      A_i     SPAR  n_supply_i  pv_share  mbt_share province
 | Voronoi | `Σ_{i: j=j*(i)} P_i Σ_m π_m 1[κ_m d_ij ≤ D_max]` | `S_{j*} / E_{j*}` |
 | iFCA | `S_j Σ_i r_i f_ij`, `r_i = P_i / Σ_j S_j f_ij` | `1 / r_i` |
 | 3SFCA | `Σ_i P_i G_ij f_ij`, `G_ij = f_ij / Σ_k f_ik` | `Σ_j R_j G_ij f_ij` |
+| MAC-3SFCA-E | `Σ_i P_i Φ_i G_ij`, `Φ_i = max_j f_ij` | `Σ_j R_j G_ij f_ij` |
 
 With no `decay` on any mode, `f_ij = 1` and Catchment reduces to plain counts of demand
 and capacity within reach.
+
+MAC-3SFCA-E separates *whether* a node travels (`Φ_i`) from *which* site it picks
+(`G_ij`), which 3SFCA conflates. Because `Σ_j G_ij = 1`, its total collapses to
+`Σ_j E_j = Σ_i P_i max_j f_ij` — the classical facility-location function, monotone and
+submodular in the site set, and therefore usable as an optimisation objective where the
+other families' totals are not. It also emits `L_j = E_j / S_j`, the operational load per
+unit capacity.
 
 Combined impedance, for any number of modes:
 
@@ -145,6 +154,7 @@ Every page also stands alone as plain markdown in the repo:
 | [families/voronoi.md](docs/families/voronoi.md) | nearest-site assignment |
 | [families/ifca.md](docs/families/ifca.md) | inverted floating catchment area |
 | [families/sfca.md](docs/families/sfca.md) | three-step floating catchment area |
+| [families/sfca-e.md](docs/families/sfca-e.md) | 3SFCA with explicit participation, for optimisation |
 | [outputs.md](docs/outputs.md) | the `Result` object and the full column dictionary |
 | [stats.md](docs/stats.md) | the four optional stat groups |
 | [sweep.md](docs/sweep.md) | grid syntax, labels, result schema |
@@ -175,7 +185,7 @@ src/interaction_models/
     prepare.py     Prepared, prepare(), validate_inputs()
     modes.py       Mode, gaussian(), f_multi assembly + NaN renormalisation
     _core.py       segmented numpy primitives (no domain concepts)
-    models.py      catchment(), voronoi(), ifca(), sfca(); Result assembly
+    models.py      catchment(), voronoi(), ifca(), sfca(), sfca_e(); Result assembly
     stats.py       optional stat groups
     sweep.py       sweep()
 ```

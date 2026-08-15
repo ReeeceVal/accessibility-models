@@ -16,6 +16,22 @@ def test_single_import_surface():
     assert callable(im.stats.gini)
 
 
+def test_every_family_is_reachable_by_name():
+    assert set(im.sweep.__globals__["MODELS"]) == {
+        "catchment", "voronoi", "ifca", "sfca", "sfca_e",
+    }
+
+
+def test_sfca_e_sweeps_like_any_other_family(prep):
+    rows = im.sweep(
+        prep, "sfca_e", modes=MAC, D_max=D_MAX, tau=TAU,
+        grid={"Q": [1, 2, 3]}, stats=["coverage"],
+    )
+    assert list(rows["model"]) == ["sfca_e"] * 3
+    # Phi_i is invariant to Q, so the total is too — the family's headline property.
+    assert rows["sum_E_j"].nunique() == 1
+
+
 def test_grid_is_a_cartesian_product(prep):
     rows = im.sweep(
         prep,

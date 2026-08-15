@@ -73,7 +73,7 @@ def test_mixing_prepared_and_frames_is_rejected(frames, prep):
 
 def test_params_describe_every_configuration(prep):
     """params is the full description of a call: every family reports the same keys."""
-    from interaction_models import ifca, sfca
+    from interaction_models import ifca, sfca, sfca_e
 
     resolved = [
         catchment(prep, D_max=D_MAX).params,
@@ -87,6 +87,8 @@ def test_params_describe_every_configuration(prep):
         ifca(prep, modes=MAC, D_max=D_MAX, tau=TAU, Q=2).params,
         sfca(prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=2).params,
         sfca(prep, modes=MAC, D_max=D_MAX, tau=TAU, Q=2).params,
+        sfca_e(prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=2).params,
+        sfca_e(prep, modes=MAC, D_max=D_MAX, tau=TAU, Q=2).params,
     ]
     assert all(set(p) == {"D_max", "Q", "tau", "n_modes"} for p in resolved)
     assert [(p["n_modes"], p["Q"], p["tau"]) for p in resolved] == [
@@ -94,4 +96,23 @@ def test_params_describe_every_configuration(prep):
         (0, None, None), (2, None, None),
         (1, None, TAU), (1, 2, TAU), (2, None, TAU), (2, 2, TAU),
         (1, 2, TAU), (2, 2, TAU),
+        (1, 2, TAU), (2, 2, TAU),
     ]
+
+
+def test_every_family_agrees_on_the_toy_network_totals(prep):
+    """No family may emit more exposure than there is demand."""
+    from interaction_models import sfca, sfca_e
+
+    results = [
+        catchment(prep, modes=SINGLE, D_max=D_MAX, tau=TAU),
+        voronoi(prep, modes=MAC, D_max=D_MAX),
+        sfca(prep, modes=MAC, D_max=D_MAX, tau=TAU, Q=2),
+        sfca_e(prep, modes=MAC, D_max=D_MAX, tau=TAU, Q=2),
+    ]
+    # catchment double-counts by construction; the partitioning families cannot.
+    for res in results[1:]:
+        assert res.supply["E_j"].sum() <= TOTAL_DEMAND + 1e-9
+    assert set(results[-1].supply.columns) >= {"E_j", "R_j", "L_j"}
+    assert "Phi_i" in results[-1].demand.columns
+    assert "Phi_i" not in results[2].demand.columns

@@ -3,7 +3,7 @@
 A lean, environment-agnostic Python package computing spatial interaction and
 accessibility models over a demand → supply cost matrix.
 
-Four model families, each a single model whose optional terms switch on with the
+Five model families, each a single model whose optional terms switch on with the
 parameters that define them:
 
 | Family | What it does | Page |
@@ -12,6 +12,7 @@ parameters that define them:
 | **Voronoi** | winner-take-all assignment to the nearest site | [voronoi](families/voronoi.md) |
 | **iFCA** | sites compete for demand, weighted by crowdedness | [ifca](families/ifca.md) |
 | **3SFCA** | demand-side selection across a bounded choice set | [sfca](families/sfca.md) |
+| **MAC-3SFCA-E** | 3SFCA with an explicit participation step; monotone under site openings | [sfca-e](families/sfca-e.md) |
 
 Every family emits the same two outputs: `E_j`, the expected exposure of a supply point,
 and `A_i`, the accessibility of a demand node.
@@ -102,6 +103,10 @@ Three things to notice:
 * [The pipeline](pipeline.md) — the seven stages, and which families run which
 * [Outputs](outputs.md) — the `Result` object and every column it can emit
 * [Sweep](sweep.md) — running a grid over one `Prepared`
+
+Choosing a family for a **site-selection optimisation** rather than for estimation over a
+fixed network? See [MAC-3SFCA-E](families/sfca-e.md#when-to-use-which) — most of the
+families' `Σ_j E_j` behave badly as objective functions.
 
 ## Scope
 

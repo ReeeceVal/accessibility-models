@@ -182,7 +182,7 @@ def compute_stats(
             if G is None:
                 raise ValueError(
                     f"stat group 'choice_set' needs a choice set; {family} has none "
-                    "(use sfca, or ifca with Q set)"
+                    "(use sfca or sfca_e, or ifca with Q set)"
                 )
             out.update(_choice_set(G, seg, Q))
     return out

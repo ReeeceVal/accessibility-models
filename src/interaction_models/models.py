@@ -1,4 +1,4 @@
-"""The four model families and the ``Result`` they return.
+"""The five model families and the ``Result`` they return.
 
 Each family is a single model. Its optional terms — impedance, mode split, a bounded
 choice set — switch on when the corresponding parameter is given, so the configuration
@@ -27,7 +27,7 @@ if TYPE_CHECKING:
 
     from .modes import Mode
 
-__all__ = ["Result", "catchment", "ifca", "sfca", "voronoi"]
+__all__ = ["Result", "catchment", "ifca", "sfca", "sfca_e", "voronoi"]
 
 _DEFAULT_OUTPUT = ("demand", "supply")
 
@@ -43,10 +43,11 @@ class Result:
         the family does not use are ``None``.
     demand : DataFrame or None
         ``demand_id | demand | A_i | SPAR | n_supply_i | <passthrough>``, plus ``r_i``
-        for the iFCA family. ``None`` when ``"demand"`` is not in ``output``.
+        for the iFCA family and ``Phi_i`` for MAC-3SFCA-E. ``None`` when ``"demand"`` is
+        not in ``output``.
     supply : DataFrame or None
-        ``supply_id | capacity | E_j | R_j | n_demand_j | <passthrough>``. ``None`` when
-        ``"supply"`` is not in ``output``.
+        ``supply_id | capacity | E_j | R_j | n_demand_j | <passthrough>``, plus ``L_j``
+        for MAC-3SFCA-E. ``None`` when ``"supply"`` is not in ``output``.
     stats : dict of str to float or None
         Flat statistics, ``None`` unless ``stats=[...]`` was requested.
     """
@@ -308,6 +309,13 @@ def _R_j(S: np.ndarray | None, E_j: np.ndarray) -> np.ndarray:
     if S is None:
         return np.full(E_j.size, np.nan)
     return np.divide(S, E_j, out=np.full(E_j.size, np.nan), where=E_j > 0)
+
+
+def _L_j(S: np.ndarray | None, E_j: np.ndarray) -> np.ndarray:
+    """Operational load per unit capacity; NaN where ``S_j == 0`` or capacity is absent."""
+    if S is None:
+        return np.full(E_j.size, np.nan)
+    return np.divide(E_j, S, out=np.full(E_j.size, np.nan), where=S > 0)
 
 
 # --- Voronoi --------------------------------------------------------------------
@@ -610,4 +618,121 @@ def sfca(
     return _finish(
         prep, params, output, demand_cols, supply_cols,
         stats=stats, n_pairs_used=sel.n_pairs, seg=sel.seg, family="sfca", G=G,
+    )
+
+
+# --- MAC-3SFCA-E ----------------------------------------------------------------
+
+
+def sfca_e(
+    prep: Prepared | pd.DataFrame,
+    supply_df: pd.DataFrame | None = None,
+    cost_df: pd.DataFrame | None = None,
+    *,
+    modes: Sequence[Mode],
+    D_max: float = np.inf,
+    tau: float = 0.0,
+    Q: int,
+    stats: Sequence[str] | None = None,
+    output: Sequence[str] = _DEFAULT_OUTPUT,
+    validate: bool = True,
+) -> Result:
+    """Three-step FCA with an explicit participation step, monotone under site openings.
+
+    3SFCA lets ``f_ij`` govern both *which* site a node selects and *whether* it travels
+    at all, which makes ``Σ_j E_j`` fall when a below-average site opens. This family
+    separates the two: ``Phi_i`` gates participation on the node's single best option,
+    and ``G_ij`` — unchanged, and capacity-blind — allocates the participating demand.
+
+    Formulae::
+
+        Phi_i = max_{j in C_Q(i)} f_multi(i, j)
+        G_ij  = f_ij / sum_{k in C_Q(i)} f_ik
+        E_j   = sum_{i: j in C_Q(i)} P_i * Phi_i * G_ij
+        L_j   = E_j / S_j                                 (operational load per unit capacity)
+        R_j   = S_j / E_j                                 (diagnostic)
+        A_i   = sum_j R_j * G_ij * f_ij
+
+    Since ``sum_j G_ij = 1``, the network total collapses to
+    ``Σ_j E_j = Σ_i P_i max_j f_ij`` — the classical facility-location function, which is
+    monotone and submodular in the site set. Capacity never enters selection; it appears
+    only in ``L_j`` and ``R_j``.
+
+    Parameters
+    ----------
+    prep : Prepared or DataFrame
+    modes : sequence of Mode
+        Required.
+    D_max : float, default inf
+    tau : float, default 0.0
+        Impedance floor, applied before ``C_Q(i)`` is formed.
+    Q : int
+        Choice-set size. **Required**, as for :func:`sfca` — ``G_ij`` is defined over
+        ``C_Q(i)``. ``Phi_i`` is unaffected by it (see Notes).
+    output : sequence of str, default ("demand", "supply")
+    validate : bool, default True
+
+    Returns
+    -------
+    Result
+        The demand frame carries ``Phi_i`` alongside ``A_i``; the supply frame carries
+        ``L_j`` alongside ``R_j``.
+
+    Raises
+    ------
+    ValueError
+        If ``modes`` is empty, ``Q`` is not a finite positive integer, or ``A_i`` is
+        requested without a ``capacity`` column.
+
+    Notes
+    -----
+    ``Phi_i`` is invariant to ``Q``: the maximising pair is necessarily the highest-ranked
+    member of ``C_Q(i)``, so it survives any ``Q >= 1``. ``Q`` therefore governs how
+    exposure is distributed across sites, never how much of it exists.
+
+    ``Phi_i`` is the maximum of the impedances in the choice set where :func:`sfca` uses
+    their contraharmonic mean. A weighted average never exceeds a maximum, so
+    ``Σ_j E_j`` here is bounded below by the 3SFCA total, with equality when every
+    impedance in the choice set is equal.
+
+    See Also
+    --------
+    docs/families/sfca-e.md
+    """
+    prep = _as_prepared(prep, supply_df, cost_df, modes, validate)
+    if not modes:
+        raise ValueError("sfca_e requires modes=[...]")
+    if not _q_is_set(Q) or Q < 1:
+        raise ValueError("sfca_e requires a finite Q >= 1; G_ij is defined over C_Q(i)")
+
+    sel = _select(prep, modes, D_max, tau, Q, True)
+    G = _selection_probability(sel)
+    Phi_i = _core.segment_max(sel.f, sel.seg)
+    drawn = prep.P[sel.demand_code] * Phi_i[sel.demand_code] * G
+    E_j = _core.group_sum(sel.supply_code, drawn, prep.n_supply)
+    params = {"D_max": D_max, "Q": Q, "tau": tau, "n_modes": len(modes)}
+
+    demand_cols = supply_cols = None
+    if "supply" in output or stats:
+        supply_cols = {
+            "E_j": E_j,
+            "R_j": _R_j(prep.S, E_j),
+            "L_j": _L_j(prep.S, E_j),
+            "n_demand_j": _n_demand_j(sel, prep.n_supply),
+        }
+    if "demand" in output or stats:
+        S = _require_capacity(prep, "A_i")
+        # R_j is NaN where E_j == 0, but such a site draws no pair, so 0.0 is safe here.
+        R_finite = np.divide(S, E_j, out=np.zeros(prep.n_supply), where=E_j > 0)
+        A_i = _core.segment_sum(R_finite[sel.supply_code] * G * sel.f, sel.seg)
+        demand_cols = {
+            "A_i": A_i,
+            "SPAR": _spar(A_i),
+            "Phi_i": Phi_i,
+            "n_supply_i": _n_supply_i(sel),
+        }
+
+    return _finish(
+        prep, params, output, demand_cols, supply_cols,
+        stats=stats, n_pairs_used=sel.n_pairs, seg=sel.seg, family="sfca_e", G=G,
     )

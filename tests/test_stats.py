@@ -7,7 +7,7 @@ import pytest
 from conftest import D_MAX, TAU, P, Q, S
 from test_ifca import MAC, SINGLE
 
-from interaction_models import catchment, ifca, sfca, voronoi
+from interaction_models import catchment, ifca, sfca, sfca_e, voronoi
 from interaction_models.stats import gini
 
 
@@ -112,6 +112,20 @@ def test_choice_set_n_eff_is_two_for_an_even_split(prep):
 def test_choice_set_available_from_ifca_with_q(prep):
     res = ifca(prep, modes=MAC, D_max=D_MAX, tau=TAU, Q=Q, stats=["choice_set"])
     assert res.stats["frac_demand_q_binding"] == pytest.approx(3 / 6)
+
+
+def test_choice_set_available_from_sfca_e(prep):
+    """sfca_e shares 3SFCA's G_ij, so the choice-set group reports identically."""
+    kwargs = {"modes": SINGLE, "D_max": D_MAX, "tau": TAU, "Q": Q, "stats": ["choice_set"]}
+    assert sfca_e(prep, **kwargs).stats == sfca(prep, **kwargs).stats
+
+
+def test_coverage_from_sfca_e_uses_its_own_exposure(prep):
+    res = sfca_e(prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q, stats=["coverage"])
+    assert res.stats["sum_E_j"] == pytest.approx(res.supply["E_j"].sum())
+    assert res.stats["demand_capture_rate"] == pytest.approx(
+        res.stats["sum_E_j"] / sum(P.values())
+    )
 
 
 @pytest.mark.parametrize(

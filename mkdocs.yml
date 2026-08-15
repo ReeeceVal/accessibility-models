@@ -45,6 +45,7 @@ nav:
       - Voronoi: families/voronoi.md
       - iFCA: families/ifca.md
       - 3SFCA: families/sfca.md
+      - MAC-3SFCA-E: families/sfca-e.md
   - Reference:
       - Outputs: outputs.md
       - Stats: stats.md

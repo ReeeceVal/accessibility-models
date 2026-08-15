@@ -15,6 +15,7 @@ __all__ = [
     "group_sum",
     "segment_first_rows",
     "segment_lengths",
+    "segment_max",
     "segment_position",
     "segment_rank_desc",
     "segment_starts",
@@ -71,6 +72,32 @@ def segment_sum(x: np.ndarray, seg: np.ndarray) -> np.ndarray:
     nonempty = segment_lengths(seg) > 0
     if nonempty.any():
         out[nonempty] = np.add.reduceat(x, seg[:-1][nonempty])
+    return out
+
+
+def segment_max(x: np.ndarray, seg: np.ndarray) -> np.ndarray:
+    """Maximum of ``x`` within each segment.
+
+    The counterpart of :func:`segment_sum`, wrapping :func:`numpy.maximum.reduceat` for
+    the same reason: an empty segment would otherwise emit the element at the boundary
+    index. Empty segments give ``0.0``, matching the convention that a node reaching
+    nobody contributes nothing.
+
+    Parameters
+    ----------
+    x : ndarray, shape (n_rows,)
+    seg : ndarray of int64, shape (n_groups + 1,)
+
+    Returns
+    -------
+    ndarray of float64, shape (n_groups,)
+    """
+    if x.dtype != np.float64:
+        x = x.astype(np.float64)
+    out = np.zeros(seg.size - 1, dtype=np.float64)
+    nonempty = segment_lengths(seg) > 0
+    if nonempty.any():
+        out[nonempty] = np.maximum.reduceat(x, seg[:-1][nonempty])
     return out
 
 

@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 
 import pandas as pd
 
-from .models import catchment, ifca, sfca, voronoi
+from .models import catchment, ifca, sfca, sfca_e, voronoi
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
@@ -24,7 +24,13 @@ if TYPE_CHECKING:
 
 __all__ = ["MODELS", "sweep"]
 
-MODELS = {"catchment": catchment, "voronoi": voronoi, "ifca": ifca, "sfca": sfca}
+MODELS = {
+    "catchment": catchment,
+    "voronoi": voronoi,
+    "ifca": ifca,
+    "sfca": sfca,
+    "sfca_e": sfca_e,
+}
 
 #: Grid keys that go straight to the model function.
 _PARAM_KEYS = ("D_max", "tau", "Q")
@@ -66,7 +72,8 @@ def sweep(
     prep : Prepared
         Built once, reused for every combination — this is the whole point.
     model : str or callable
-        ``"catchment"``, ``"voronoi"``, ``"ifca"``, ``"sfca"``, or a model function.
+        ``"catchment"``, ``"voronoi"``, ``"ifca"``, ``"sfca"``, ``"sfca_e"``, or a model
+        function.
     grid : dict of str to sequence
         Keys may be ``"D_max"``, ``"tau"``, ``"Q"`` (passed to the model),
         ``"modes"`` (a whole mode list), ``"decay"`` (applied to **every** mode of the

@@ -30,15 +30,18 @@ Every column the package can emit.
 | `SPAR` | demand | float64 | `A_i / mean(A_i)` — spatial access ratio | with `A_i` |
 | `n_supply_i` | demand | int64 | surviving pairs for `i`, i.e. realised `\|C(i)\|` | with `A_i` |
 | `r_i` | demand | float64 | demand-to-supply ratio, `P_i / Σ_j S_j f_ij`; `inf` where the denominator is 0 | `ifca()` only |
+| `Phi_i` | demand | float64 | participation rate, `max_j f_ij` over the choice set; `0.0` where the set is empty | `sfca_e()` only |
 | `supply_id` | supply | as input | site identifier | always |
 | `capacity` | supply | float64 | `S_j` | when `supply_df` has it |
 | `E_j` | supply | float64 | expected exposure — **the primary output** | `"supply"` in `output` |
 | `R_j` | supply | float64 | `S_j / E_j`, a diagnostic only; `NaN` where `E_j == 0` or capacity is absent | with `E_j` |
+| `L_j` | supply | float64 | operational load per unit capacity, `E_j / S_j`; `NaN` where `S_j == 0` or capacity is absent | `sfca_e()` only |
 | `n_demand_j` | supply | int64 | surviving pairs naming `j` | with `E_j` |
 | *anything else* | matching frame | unchanged | passthrough | always |
 
 `A_i` is defined per family — cumulative capacity for Catchment, `S_{j*}/E_{j*}` for
-Voronoi, `1/r_i` for iFCA, `Σ_j R_j G_ij f_ij` for 3SFCA. See the family pages.
+Voronoi, `1/r_i` for iFCA, `Σ_j R_j G_ij f_ij` for 3SFCA and MAC-3SFCA-E. See the family
+pages.
 
 ### Passthrough
 
@@ -57,7 +60,9 @@ Columns on `cost_df` are not passed through — there is no per-pair output fram
 | node reaching nobody | `A_i = 0`, `n_supply_i = 0` |
 | `mean(A_i) == 0` | `SPAR = NaN` everywhere |
 | `ifca()` node with `Σ_j S_j f_ij = 0` | `r_i = inf`, `A_i = 0`, contributes nothing to any `C_j` |
-| `capacity` column absent | `R_j = NaN`; requesting `A_i` raises `ValueError` |
+| `sfca_e()` node reaching nobody | `Phi_i = 0`, so it contributes nothing to any `E_j` |
+| `sfca_e()` site reached by nobody | `L_j = 0.0`, not `NaN` — `0 / S_j` is well defined |
+| `capacity` column absent | `R_j = NaN`, `L_j = NaN`; requesting `A_i` raises `ValueError` |
 
 ## `params`
 
@@ -65,9 +70,9 @@ Columns on `cost_df` are not passed through — there is no per-pair output fram
 nothing about the configuration has to be remembered separately. Always the same four
 keys, so sweep rows line up regardless of family; a key the family does not use is `None`:
 
-| Key | `catchment` | `voronoi` | `ifca` | `sfca` |
-|---|---|---|---|---|
-| `D_max` | ✓ | ✓ | ✓ | ✓ |
-| `Q` | `None` | `None` | ✓ or `None` | ✓ (required) |
-| `tau` | ✓, `None` without impedance | `None` | ✓ | ✓ |
-| `n_modes` | ✓ | ✓ | ✓ | ✓ |
+| Key | `catchment` | `voronoi` | `ifca` | `sfca` | `sfca_e` |
+|---|---|---|---|---|---|
+| `D_max` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `Q` | `None` | `None` | ✓ or `None` | ✓ (required) | ✓ (required) |
+| `tau` | ✓, `None` without impedance | `None` | ✓ | ✓ | ✓ |
+| `n_modes` | ✓ | ✓ | ✓ | ✓ | ✓ |

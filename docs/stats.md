@@ -32,9 +32,13 @@ persistence — is left to the caller.
 | `n_demand_zero_access` | count of `i` with `A_i == 0` |
 
 `demand_capture_rate` is only meaningful where `E_j` is a **demand count**: Catchment
-without impedance, Voronoi, and 3SFCA. Add a decay to Catchment and it is deflated by
-impedance; under `ifca()` `E_j` is a crowdedness × capacity product, not a headcount.
-Nothing stops you reading it there; it just does not mean what the name suggests.
+without impedance, Voronoi, 3SFCA, and MAC-3SFCA-E. Add a decay to Catchment and it is
+deflated by impedance; under `ifca()` `E_j` is a crowdedness × capacity product, not a
+headcount. Nothing stops you reading it there; it just does not mean what the name
+suggests.
+
+Under `sfca_e()` it has a direct reading: since `Σ_j G_ij = 1`, the rate is exactly the
+demand-weighted mean participation, `Σ_i P_i Φ_i / Σ_i P_i`.
 
 For Voronoi, `n_pairs_used` counts **assigned nodes**, not candidate pairs — the family's
 surviving pair set is one row per node.
@@ -78,9 +82,13 @@ inequality.
 
 ## `choice_set`
 
-**Only where a bounded choice set exists** — `sfca()`, or `ifca()` with `Q` set. Requesting it from
-`catchment()` or `voronoi()`, or from `ifca()` without `Q`, raises `ValueError`: there is
-no choice set to describe, and returning `NaN` would hide the mistake.
+**Only where a bounded choice set exists** — `sfca()`, `sfca_e()`, or `ifca()` with `Q`
+set. Requesting it from `catchment()` or `voronoi()`, or from `ifca()` without `Q`, raises
+`ValueError`: there is no choice set to describe, and returning `NaN` would hide the
+mistake.
+
+`sfca_e()` shares 3SFCA's `G_ij` exactly, so this group reports identical values for the
+two families at the same parameters.
 
 | Key | Definition |
 |---|---|

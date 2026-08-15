@@ -1,6 +1,6 @@
 """Spatial interaction and accessibility estimators over a demand-to-supply cost matrix.
 
-Four model families, computed from three pandas DataFrames::
+Five model families, computed from three pandas DataFrames::
 
     import interaction_models as im
 
@@ -17,7 +17,7 @@ comes back as ``res.params``. See ``docs/`` for the full reference.
 """
 
 from . import stats
-from .models import Result, catchment, ifca, sfca, voronoi
+from .models import Result, catchment, ifca, sfca, sfca_e, voronoi
 from .modes import Mode, gaussian
 from .prepare import Prepared, prepare, validate_inputs
 from .sweep import sweep
@@ -31,6 +31,7 @@ __all__ = [
     "ifca",
     "prepare",
     "sfca",
+    "sfca_e",
     "stats",
     "sweep",
     "validate_inputs",
