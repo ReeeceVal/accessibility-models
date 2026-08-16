@@ -31,7 +31,9 @@ def run(prep, **kwargs):
 
 def test_no_decay_reports_no_impedance(prep):
     """tau is None in params when no mode carries a decay, since it cannot bite."""
-    assert run(prep).params == {"D_max": D_MAX, "Q": None, "tau": None, "n_modes": 0}
+    assert run(prep).params == {
+        "D_max": D_MAX, "Q": None, "tau": None, "n_modes": 0, "n_open": None
+    }
     assert run(prep, modes=[Mode(share=1.0)]).params["tau"] is None
 
 
@@ -56,7 +58,9 @@ def test_binary_accessibility_is_reachable_capacity(prep):
 
 def test_single_mode_params(prep):
     res = run(prep, modes=[Mode(share=1.0, decay=gaussian(BETA))], tau=TAU)
-    assert res.params == {"D_max": D_MAX, "Q": None, "tau": TAU, "n_modes": 1}
+    assert res.params == {
+        "D_max": D_MAX, "Q": None, "tau": TAU, "n_modes": 1, "n_open": None
+    }
 
 
 def test_catchment_f_exposure(prep):

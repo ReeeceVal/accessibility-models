@@ -4,6 +4,7 @@ Every family runs the same first stages, in this order, always:
 
 | # | Stage | What it does |
 |---|---|---|
+| 0 | `open_mask` | drop pairs whose supply point is closed — omitted, every site is open |
 | 1 | `C_D(i)` | keep pairs with `cost_default <= D_max` |
 | 2 | `f_m` | per mode, `f_m = decay_m(kappa_m * cost_m)`; `NaN` cost ⇒ mode unavailable |
 | 3 | renormalise | redistribute unavailable modes' shares over the available ones — see [modes](modes.md) |
@@ -13,6 +14,29 @@ Every family runs the same first stages, in this order, always:
 | 7 | family arithmetic | see the family pages |
 
 `E_j` and `A_i` are always computed from the **same** filtered pair set.
+
+## Stage 0: the open set
+
+`open_mask` is a boolean array, one flag per row of `supply_df`. It runs **first**, before
+impedance and before the rank, which is the whole of its semantics: a closed site is
+indistinguishable from one that was never in `cost_df` at all. Results are therefore
+identical — bit-for-bit, not merely close — to re-running `prepare()` on a `cost_df`
+restricted to the open sites, because `f_multi(i, j)` depends only on the pair and the
+impedance parameters, never on which sites are open.
+
+The consequence that matters is at stage 6: **`C_Q(i)` is the top `Q` open options, not
+the open members of the top `Q` overall.** If a node's four best sites rank 1, 2, 4, 7
+among the open set, `Q = 4` takes all four. Ranking first and masking afterwards would
+leave that node with two options instead of four, and would let a node whose nearby sites
+all closed drop out of the model entirely.
+
+Output frames keep their full length, with `E_j = 0` and `n_demand_j = 0` at closed sites,
+so results stay aligned across candidate networks. `params["n_open"]` records how many
+sites were open.
+
+This is the site-selection lever. For [MAC-3SFCA-E](families/sfca-e.md), `Σ_j E_j` is
+monotone in it — opening a site can never lower the total — which is what makes the family
+usable as an optimisation objective.
 
 ## Which stages a family runs
 

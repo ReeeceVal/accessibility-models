@@ -89,6 +89,28 @@ def _as_prepared(
     return prepare(first, supply_df, cost_df, modes=modes, validate=validate)
 
 
+def _open_rows(prep: Prepared, rows: np.ndarray, open_mask: np.ndarray | None) -> np.ndarray:
+    """Drop pairs whose supply point is closed (pipeline stage 0).
+
+    Applied before impedance, so a closed site is indistinguishable from one absent
+    from ``cost_df`` altogether: every later stage — ``tau``, the rank, ``C_Q(i)`` —
+    sees only the open sites, and ``Q`` therefore means the top ``Q`` *open* options.
+    """
+    if open_mask is None:
+        return rows
+    mask = np.asarray(open_mask)
+    if mask.dtype != np.bool_ or mask.shape != (prep.n_supply,):
+        raise ValueError(
+            f"open_mask must be a boolean array of shape ({prep.n_supply},), got "
+            f"dtype {mask.dtype} shape {mask.shape}"
+        )
+    return rows[mask[prep.supply_code[rows]]]
+
+
+def _n_open(prep: Prepared, open_mask: np.ndarray | None) -> int | None:
+    return None if open_mask is None else int(np.count_nonzero(open_mask))
+
+
 def _select(
     prep: Prepared,
     modes: Sequence[Mode] | None,
@@ -96,9 +118,10 @@ def _select(
     tau: float,
     Q: int | None,
     use_impedance: bool,
+    open_mask: np.ndarray | None = None,
 ) -> _Selection:
-    """Pipeline stages 1-6, returning the surviving pairs and their ``f_multi``."""
-    rows = np.flatnonzero(prep.cost <= D_max)
+    """Pipeline stages 0-6, returning the surviving pairs and their ``f_multi``."""
+    rows = _open_rows(prep, np.flatnonzero(prep.cost <= D_max), open_mask)
 
     if use_impedance:
         f = impedance(prep, modes, rows)
@@ -228,6 +251,7 @@ def catchment(
     modes: Sequence[Mode] | None = None,
     D_max: float = np.inf,
     tau: float = 0.0,
+    open_mask: np.ndarray | None = None,
     stats: Sequence[str] | None = None,
     output: Sequence[str] = _DEFAULT_OUTPUT,
     validate: bool = True,
@@ -256,6 +280,10 @@ def catchment(
         Maximum ``cost_default``, defining ``C_D(i)``.
     tau : float, default 0.0
         Impedance floor on ``f_multi``. Unused when there is no impedance.
+    open_mask : ndarray of bool, optional
+        One flag per row of ``supply_df``. Closed sites are dropped before every other
+        stage, so results match those of re-running on a ``cost_df`` restricted to the
+        open sites. Output frames keep their full length, with zeros at closed sites.
     output : sequence of str, default ("demand", "supply")
         Which frames to assemble.
     validate : bool, default True
@@ -277,12 +305,13 @@ def catchment(
     prep = _as_prepared(prep, supply_df, cost_df, modes, validate)
     use_impedance = bool(modes) and any(mode.decay is not None for mode in modes)
 
-    sel = _select(prep, modes, D_max, tau, None, use_impedance)
+    sel = _select(prep, modes, D_max, tau, None, use_impedance, open_mask)
     params = {
         "D_max": D_max,
         "Q": None,
         "tau": tau if use_impedance else None,
         "n_modes": len(modes) if modes else 0,
+        "n_open": _n_open(prep, open_mask),
     }
 
     demand_cols = supply_cols = None
@@ -328,6 +357,7 @@ def voronoi(
     *,
     modes: Sequence[Mode] | None = None,
     D_max: float = np.inf,
+    open_mask: np.ndarray | None = None,
     stats: Sequence[str] | None = None,
     output: Sequence[str] = _DEFAULT_OUTPUT,
     validate: bool = True,
@@ -353,6 +383,9 @@ def voronoi(
     modes : sequence of Mode, optional
         Only ``share``, ``cost`` and ``kappa`` are read; ``decay`` is ignored.
     D_max : float, default inf
+    open_mask : ndarray of bool, optional
+        One flag per row of ``supply_df``. Closed sites cannot be assigned, so ``j*(i)``
+        is the nearest **open** site.
     output : sequence of str, default ("demand", "supply")
     validate : bool, default True
 
@@ -367,7 +400,7 @@ def voronoi(
     """
     prep = _as_prepared(prep, supply_df, cost_df, modes, validate)
 
-    rows = np.flatnonzero(prep.cost <= D_max)
+    rows = _open_rows(prep, np.flatnonzero(prep.cost <= D_max), open_mask)
     seg = _core.segment_starts(prep.demand_code[rows], prep.n_demand)
     assigned, first = _core.segment_first_rows(seg)
     star_rows = rows[first]
@@ -379,7 +412,13 @@ def voronoi(
         else np.ones(star_rows.size, dtype=np.float64)
     )
     E_j = _core.group_sum(star_supply, prep.P[assigned] * w, prep.n_supply)
-    params = {"D_max": D_max, "Q": None, "tau": None, "n_modes": len(modes) if modes else 0}
+    params = {
+        "D_max": D_max,
+        "Q": None,
+        "tau": None,
+        "n_modes": len(modes) if modes else 0,
+        "n_open": _n_open(prep, open_mask),
+    }
 
     demand_cols = supply_cols = None
     if "supply" in output or stats:
@@ -423,6 +462,7 @@ def ifca(
     D_max: float = np.inf,
     tau: float = 0.0,
     Q: int | None = None,
+    open_mask: np.ndarray | None = None,
     stats: Sequence[str] | None = None,
     output: Sequence[str] = _DEFAULT_OUTPUT,
     validate: bool = True,
@@ -450,6 +490,9 @@ def ifca(
         Impedance floor, applied before the choice set is formed.
     Q : int, optional
         Choice-set size. ``None`` or ``inf`` leaves the denominator over ``C_D(i)``.
+    open_mask : ndarray of bool, optional
+        One flag per row of ``supply_df``. Closed sites are dropped before ``r_i``'s
+        denominator is formed, so they neither absorb demand nor dilute it.
     output : sequence of str, default ("demand", "supply")
     validate : bool, default True
 
@@ -481,12 +524,13 @@ def ifca(
         raise ValueError("ifca requires modes=[...]; it is undefined without impedance")
 
     S = _require_capacity(prep, "the iFCA family (S_j is in the denominator)")
-    sel = _select(prep, modes, D_max, tau, Q, True)
+    sel = _select(prep, modes, D_max, tau, Q, True, open_mask)
     params = {
         "D_max": D_max,
         "Q": Q if _q_is_set(Q) else None,
         "tau": tau,
         "n_modes": len(modes),
+        "n_open": _n_open(prep, open_mask),
     }
 
     supply_within_reach = _core.segment_sum(S[sel.supply_code] * sel.f, sel.seg)
@@ -544,6 +588,7 @@ def sfca(
     D_max: float = np.inf,
     tau: float = 0.0,
     Q: int,
+    open_mask: np.ndarray | None = None,
     stats: Sequence[str] | None = None,
     output: Sequence[str] = _DEFAULT_OUTPUT,
     validate: bool = True,
@@ -572,6 +617,10 @@ def sfca(
     Q : int
         Choice-set size. **Required** by this family — the selection probability is
         defined over ``C_Q(i)``.
+    open_mask : ndarray of bool, optional
+        One flag per row of ``supply_df``. Closed sites are dropped before the rank, so
+        ``C_Q(i)`` is the top ``Q`` **open** options — not the open members of the
+        top ``Q`` overall.
     output : sequence of str, default ("demand", "supply")
     validate : bool, default True
 
@@ -595,11 +644,17 @@ def sfca(
     if not _q_is_set(Q) or Q < 1:
         raise ValueError("sfca requires a finite Q >= 1; G_ij is defined over C_Q(i)")
 
-    sel = _select(prep, modes, D_max, tau, Q, True)
+    sel = _select(prep, modes, D_max, tau, Q, True, open_mask)
     G = _selection_probability(sel)
     drawn = prep.P[sel.demand_code] * G * sel.f
     E_j = _core.group_sum(sel.supply_code, drawn, prep.n_supply)
-    params = {"D_max": D_max, "Q": Q, "tau": tau, "n_modes": len(modes)}
+    params = {
+        "D_max": D_max,
+        "Q": Q,
+        "tau": tau,
+        "n_modes": len(modes),
+        "n_open": _n_open(prep, open_mask),
+    }
 
     demand_cols = supply_cols = None
     if "supply" in output or stats:
@@ -633,6 +688,7 @@ def sfca_e(
     D_max: float = np.inf,
     tau: float = 0.0,
     Q: int,
+    open_mask: np.ndarray | None = None,
     stats: Sequence[str] | None = None,
     output: Sequence[str] = _DEFAULT_OUTPUT,
     validate: bool = True,
@@ -669,6 +725,12 @@ def sfca_e(
     Q : int
         Choice-set size. **Required**, as for :func:`sfca` — ``G_ij`` is defined over
         ``C_Q(i)``. ``Phi_i`` is unaffected by it (see Notes).
+    open_mask : ndarray of bool, optional
+        One flag per row of ``supply_df``, naming the sites that are open. Closed sites
+        are dropped before the rank, so ``C_Q(i)`` is the top ``Q`` **open** options —
+        not the open members of the top ``Q`` overall. This is the site-selection lever:
+        ``Σ_j E_j`` is monotone in it, and results are identical to re-running on a
+        ``cost_df`` restricted to the open sites, at a fraction of the cost.
     output : sequence of str, default ("demand", "supply")
     validate : bool, default True
 
@@ -705,12 +767,18 @@ def sfca_e(
     if not _q_is_set(Q) or Q < 1:
         raise ValueError("sfca_e requires a finite Q >= 1; G_ij is defined over C_Q(i)")
 
-    sel = _select(prep, modes, D_max, tau, Q, True)
+    sel = _select(prep, modes, D_max, tau, Q, True, open_mask)
     G = _selection_probability(sel)
     Phi_i = _core.segment_max(sel.f, sel.seg)
     drawn = prep.P[sel.demand_code] * Phi_i[sel.demand_code] * G
     E_j = _core.group_sum(sel.supply_code, drawn, prep.n_supply)
-    params = {"D_max": D_max, "Q": Q, "tau": tau, "n_modes": len(modes)}
+    params = {
+        "D_max": D_max,
+        "Q": Q,
+        "tau": tau,
+        "n_modes": len(modes),
+        "n_open": _n_open(prep, open_mask),
+    }
 
     demand_cols = supply_cols = None
     if "supply" in output or stats:

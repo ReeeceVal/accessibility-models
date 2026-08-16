@@ -67,7 +67,7 @@ Columns on `cost_df` are not passed through — there is no per-pair output fram
 ## `params`
 
 `params` is the full description of a call — it says which optional terms were active, so
-nothing about the configuration has to be remembered separately. Always the same four
+nothing about the configuration has to be remembered separately. Always the same five
 keys, so sweep rows line up regardless of family; a key the family does not use is `None`:
 
 | Key | `catchment` | `voronoi` | `ifca` | `sfca` | `sfca_e` |
@@ -76,3 +76,8 @@ keys, so sweep rows line up regardless of family; a key the family does not use 
 | `Q` | `None` | `None` | ✓ or `None` | ✓ (required) | ✓ (required) |
 | `tau` | ✓, `None` without impedance | `None` | ✓ | ✓ | ✓ |
 | `n_modes` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `n_open` | ✓ | ✓ | ✓ | ✓ | ✓ |
+
+`n_open` is the number of open sites, or `None` when no `open_mask` was passed. It is in
+`params` for the same reason the rest are: without it, two results computed over different
+site sets would be indistinguishable in a sweep table.
