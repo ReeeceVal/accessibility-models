@@ -78,7 +78,7 @@ print(res.stats["demand_capture_rate"])
 ```
 
 ```
-{'D_max': 45, 'Q': 2, 'tau': 0.01, 'n_modes': 2}
+{'D_max': 45, 'Q': 2, 'tau': 0.01, 'n_modes': 2, 'n_open': None}
 supply_id  capacity         E_j      R_j  n_demand_j
   0010001       2.0 2657.559490 0.000753           3
   0010002       1.0  264.803074 0.003776           3
@@ -90,6 +90,95 @@ demand_id  demand      A_i     SPAR  n_supply_i  pv_share  mbt_share province
        d4  2100.0 0.000696 0.293708           2      0.25       0.75       GP
 0.6463056611235294
 ```
+
+## Varying the network, or varying the parameters
+
+`f_ij` depends only on the pair and the impedance parameters — **never on which sites are
+open**. So the work splits into three stages, and you hoist out of your loop whichever one
+holds the thing that isn't changing:
+
+| Stage | Fixes | Hoist it when |
+|---|---|---|
+| `prepare()` | the input frames | always |
+| `compile_f()` | `modes`, `D_max`, `tau`, and optionally `sites` | the **network** varies |
+| the model | `Q`, `open_mask` | — |
+
+Both loops address sites with a boolean mask — one flag per row of `supply_df`, in
+`supply_df` row order, `True` = open:
+
+```python
+open_ids = ["0010001", "0010003"]                        # leading zeros stay str
+mask = supply_df["supply_id"].isin(open_ids).to_numpy()  # -> bool ndarray, aligned
+```
+
+### a) Network changes, parameters constant — optimisation
+
+Compile once; only the mask moves inside the loop:
+
+```python
+comp = im.compile_f(prep, modes=modes, D_max=45, tau=0.01)
+
+for mask in candidate_networks:
+    res = im.sfca_e(comp, Q=2, open_mask=mask)
+    total = res.supply["E_j"].sum()      # monotone in the site set
+```
+
+Inside an optimiser, flip sites by position rather than rebuilding from ids:
+
+```python
+mask = np.zeros(len(supply_df), dtype=bool)
+mask[active] = True         # integer positions into supply_df
+mask[candidate] = True      # open one more
+```
+
+`C_Q(i)` is the top `Q` **open** options — not the open members of the top `Q` overall — so
+a node whose nearest sites all closed falls back to its next best rather than dropping out.
+Closed sites stay in the frame as zero rows, so results align across candidate networks:
+
+```
+supply_id  capacity         E_j      R_j         L_j  n_demand_j
+  0010001       2.0 3005.056083 0.000666 1502.528041           3
+  0010002       1.0    0.000000      NaN    0.000000           0     <- closed
+  0010003       3.0  250.658434 0.011968   83.552811           3
+```
+
+### b) Network constant, parameters change — calibration
+
+Pass the fixed network once and sweep the parameters; `n_open` lands in every row:
+
+```python
+rows = im.sweep(prep, "sfca_e", modes=modes, D_max=45, tau=0.01, Q=2,
+                open_mask=mask,
+                grid={"decay": [("g800", im.gaussian(800)),
+                                ("g1200", im.gaussian(1200))],
+                      "kappa": [1.5, 2.0]},
+                stats=["coverage"])
+```
+
+```
+decay  kappa  Q  n_open  demand_capture_rate
+ g800    1.5  2       2             0.784892
+ g800    2.0  2       2             0.715542
+g1200    1.5  2       2             0.836455
+g1200    2.0  2       2             0.779753
+```
+
+Driving the loop yourself, bake the network in with `sites=` so the closed sites' pairs
+cost nothing to compile:
+
+```python
+for tuned in parameter_combinations:
+    comp = im.compile_f(prep, modes=tuned, D_max=45, tau=0.01, sites=mask)
+    res = im.sfca_e(comp, Q=2)
+```
+
+`sites=` and `open_mask=` are the same kind of object and differ only in lifetime — one is
+baked into the compile, the other varies per call — and an `open_mask` must be a subset of
+`sites`. Both are optional: omit them and every site is open.
+
+Accepted by `catchment()`, `ifca()`, `sfca()` and `sfca_e()`; `voronoi()` takes `open_mask`
+but not a `Compiled`. Results are identical either way — see
+[`docs/pipeline.md`](docs/pipeline.md).
 
 ## Formula reference
 
@@ -125,6 +214,7 @@ f_ij = Σ_m π_m(i) · f_m(κ_m · cost_m(i,j))       (renormalised over availab
 Every family runs the same first stages, always in this order:
 
 ```
+0.  open_mask   drop pairs whose supply point is closed
 1.  C_D(i)      keep pairs where cost_default <= D_max
 2.  f_m         per mode: f_m = decay_m(kappa_m * cost_m);  NaN cost -> unavailable
 3.  renormalise shares over available modes only
@@ -134,8 +224,9 @@ Every family runs the same first stages, always in this order:
 7.  family arithmetic
 ```
 
-A stage runs when the parameter that defines it is given — see
-[`docs/pipeline.md`](docs/pipeline.md).
+A stage runs when the parameter that defines it is given. `compile_f()` runs stages 0–5
+and hands the model a `Compiled`, so a loop over site sets pays only for stages 0, 6 and 7
+— see [`docs/pipeline.md`](docs/pipeline.md).
 
 ## Documentation
 
@@ -149,7 +240,7 @@ Every page also stands alone as plain markdown in the repo:
 |---|---|
 | [data-contract.md](docs/data-contract.md) | the three input frames; dtypes, rules, scale and memory |
 | [modes.md](docs/modes.md) | `Mode` spec, decay callables, availability vs reachability |
-| [pipeline.md](docs/pipeline.md) | the 7-stage order, ranking, and the `rank` fast path |
+| [pipeline.md](docs/pipeline.md) | the stage order, ranking, `open_mask` and `compile_f()` |
 | [families/catchment.md](docs/families/catchment.md) | cumulative opportunity |
 | [families/voronoi.md](docs/families/voronoi.md) | nearest-site assignment |
 | [families/ifca.md](docs/families/ifca.md) | inverted floating catchment area |
@@ -174,6 +265,7 @@ implementation.
 ```
 src/interaction_models/
     prepare.py     Prepared, prepare(), validate_inputs()
+    compiled.py    Compiled, compile_f(); pipeline stages 0-5, hoisted
     modes.py       Mode, gaussian(), f_multi assembly + NaN renormalisation
     _core.py       segmented numpy primitives (no domain concepts)
     models.py      catchment(), voronoi(), ifca(), sfca(), sfca_e(); Result assembly
