@@ -159,15 +159,6 @@ Every page also stands alone as plain markdown in the repo:
 | [stats.md](docs/stats.md) | the four optional stat groups |
 | [sweep.md](docs/sweep.md) | grid syntax, labels, result schema |
 
-## Scope
-
-| In scope | Out of scope |
-|---|---|
-| `E_j`, `A_i`, optional stats, for one configuration | time periods — the caller loops them |
-| `prepare()` — factorise and sort once, reuse across a sweep | I/O, orchestration, storage |
-| `sweep()` — a minimal grid runner | dedup, persistence, resume |
-| input validation | evaluation against realised counts |
-
 ## Tests
 
 ```powershell
