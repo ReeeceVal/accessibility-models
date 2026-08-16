@@ -189,3 +189,7 @@ src/interaction_models/
     stats.py       optional stat groups
     sweep.py       sweep()
 ```
+
+## Development AI assistance
+
+Development of this repository is assisted by Anthropic's `Claude Opus 5`
