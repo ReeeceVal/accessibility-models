@@ -19,6 +19,7 @@ from .models import catchment, ifca, sfca, sfca_e, voronoi
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
 
+    from .compiled import Compiled
     from .modes import Mode
     from .prepare import Prepared
 
@@ -57,7 +58,7 @@ def _apply(key: str, value: object, modes: list[Mode] | None) -> list[Mode]:
 
 
 def sweep(
-    prep: Prepared,
+    prep: Prepared | Compiled,
     model: str | Callable,
     grid: dict[str, Sequence],
     *,
@@ -69,8 +70,10 @@ def sweep(
 
     Parameters
     ----------
-    prep : Prepared
-        Built once, reused for every combination — this is the whole point.
+    prep : Prepared or Compiled
+        Built once, reused for every combination — this is the whole point. A
+        :class:`~interaction_models.compiled.Compiled` works too and is faster, but it
+        fixes ``modes``, ``D_max`` and ``tau``, so the grid is then limited to ``"Q"``.
     model : str or callable
         ``"catchment"``, ``"voronoi"``, ``"ifca"``, ``"sfca"``, ``"sfca_e"``, or a model
         function.

@@ -17,16 +17,19 @@ comes back as ``res.params``. See ``docs/`` for the full reference.
 """
 
 from . import stats
+from .compiled import Compiled, compile_f
 from .models import Result, catchment, ifca, sfca, sfca_e, voronoi
 from .modes import Mode, gaussian
 from .prepare import Prepared, prepare, validate_inputs
 from .sweep import sweep
 
 __all__ = [
+    "Compiled",
     "Mode",
     "Prepared",
     "Result",
     "catchment",
+    "compile_f",
     "gaussian",
     "ifca",
     "prepare",

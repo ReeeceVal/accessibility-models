@@ -78,7 +78,7 @@ print(res.stats["demand_capture_rate"])
 ```
 
 ```
-{'D_max': 45, 'Q': 2, 'tau': 0.01, 'n_modes': 2}
+{'D_max': 45, 'Q': 2, 'tau': 0.01, 'n_modes': 2, 'n_open': None}
 supply_id  capacity         E_j      R_j  n_demand_j
   0010001       2.0 2657.559490 0.000753           3
   0010002       1.0  264.803074 0.003776           3
@@ -90,6 +90,40 @@ demand_id  demand      A_i     SPAR  n_supply_i  pv_share  mbt_share province
        d4  2100.0 0.000696 0.293708           2      0.25       0.75       GP
 0.6463056611235294
 ```
+
+## Varying the network, or varying the parameters
+
+`f_ij` never depends on which sites are open, so hoist whichever stage holds the thing
+that is not changing. Sites are addressed by a boolean mask, one flag per `supply_df` row:
+
+```python
+mask = supply_df["supply_id"].isin(["0010001", "0010003"]).to_numpy()   # leading zeros stay str
+```
+
+**a) Network changes, parameters constant** — optimisation.
+`prepare()` → `compile_f(modes, D_max, tau)` → **mask** → `sfca_e(comp, Q, open_mask)`
+
+```python
+comp = im.compile_f(prep, modes=modes, D_max=45, tau=0.01)
+for mask in candidate_networks:
+    E_j = im.sfca_e(comp, Q=2, open_mask=mask).supply["E_j"]
+```
+
+**b) Network constant, parameters change** — calibration.
+`prepare()` → **mask** → `compile_f(modes, D_max, tau, sites)` → `sfca_e(comp, Q)`
+
+```python
+for tuned in parameter_combinations:
+    comp = im.compile_f(prep, modes=tuned, D_max=45, tau=0.01, sites=mask)
+    E_j = im.sfca_e(comp, Q=2).supply["E_j"]
+```
+
+or in one call, `im.sweep(prep, "sfca_e", modes=modes, D_max=45, tau=0.01, Q=2,
+open_mask=mask, grid={"kappa": [1.5, 2.0]})`.
+
+`C_Q(i)` is the top `Q` **open** options, and closed sites stay in the output as zero rows.
+Both masks are optional, `open_mask` must be a subset of `sites`, and `voronoi()` takes
+`open_mask` but not a `Compiled` — see [`docs/pipeline.md`](docs/pipeline.md).
 
 ## Formula reference
 
@@ -125,6 +159,7 @@ f_ij = Σ_m π_m(i) · f_m(κ_m · cost_m(i,j))       (renormalised over availab
 Every family runs the same first stages, always in this order:
 
 ```
+0.  open_mask   drop pairs whose supply point is closed
 1.  C_D(i)      keep pairs where cost_default <= D_max
 2.  f_m         per mode: f_m = decay_m(kappa_m * cost_m);  NaN cost -> unavailable
 3.  renormalise shares over available modes only
@@ -134,8 +169,9 @@ Every family runs the same first stages, always in this order:
 7.  family arithmetic
 ```
 
-A stage runs when the parameter that defines it is given — see
-[`docs/pipeline.md`](docs/pipeline.md).
+A stage runs when the parameter that defines it is given. `compile_f()` runs stages 0–5
+and hands the model a `Compiled`, so a loop over site sets pays only for stages 0, 6 and 7
+— see [`docs/pipeline.md`](docs/pipeline.md).
 
 ## Documentation
 
@@ -149,7 +185,7 @@ Every page also stands alone as plain markdown in the repo:
 |---|---|
 | [data-contract.md](docs/data-contract.md) | the three input frames; dtypes, rules, scale and memory |
 | [modes.md](docs/modes.md) | `Mode` spec, decay callables, availability vs reachability |
-| [pipeline.md](docs/pipeline.md) | the 7-stage order, ranking, and the `rank` fast path |
+| [pipeline.md](docs/pipeline.md) | the stage order, ranking, `open_mask` and `compile_f()` |
 | [families/catchment.md](docs/families/catchment.md) | cumulative opportunity |
 | [families/voronoi.md](docs/families/voronoi.md) | nearest-site assignment |
 | [families/ifca.md](docs/families/ifca.md) | inverted floating catchment area |
@@ -174,6 +210,7 @@ implementation.
 ```
 src/interaction_models/
     prepare.py     Prepared, prepare(), validate_inputs()
+    compiled.py    Compiled, compile_f(); pipeline stages 0-5, hoisted
     modes.py       Mode, gaussian(), f_multi assembly + NaN renormalisation
     _core.py       segmented numpy primitives (no domain concepts)
     models.py      catchment(), voronoi(), ifca(), sfca(), sfca_e(); Result assembly
