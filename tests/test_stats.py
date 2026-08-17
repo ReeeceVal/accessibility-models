@@ -93,6 +93,65 @@ def test_p90_p10_ratio_is_finite_when_the_tenth_percentile_is_not(prep):
     assert res.stats["p90_p10_ratio_A_i"] == pytest.approx(p90 / p10)
 
 
+def test_exposure(prep):
+    res = sfca(prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q, stats=["exposure"])
+    s, E_j = res.stats, res.supply["E_j"].to_numpy()
+    assert s["sum_E_j"] == pytest.approx(E_j.sum())
+    assert s["total_demand"] == pytest.approx(sum(P.values()))
+    assert s["demand_capture_rate"] == pytest.approx(s["sum_E_j"] / sum(P.values()))
+    assert s["n_supply_zero_exposure"] == 1  # s4
+    assert s["gini_E_j"] == pytest.approx(gini(E_j))
+    assert s["p90_E_j"] == pytest.approx(np.percentile(E_j, 90))
+    assert set(s) == {
+        "sum_E_j", "total_demand", "demand_capture_rate", "n_supply_zero_exposure",
+        "gini_E_j", "mean_E_j", "median_E_j", "p10_E_j", "p90_E_j", "std_E_j",
+        "min_E_j", "max_E_j",
+    }
+
+
+def test_exposure_agrees_with_the_groups_it_overlaps(prep):
+    """Every key is a duplicate; they must be the same numbers, not just the same names."""
+    kwargs = {"modes": SINGLE, "D_max": D_MAX, "tau": TAU, "Q": Q}
+    lean = sfca(prep, stats=["exposure"], **kwargs).stats
+    full = sfca(prep, stats=["coverage", "distribution", "inequality"], **kwargs).stats
+    assert set(lean) <= set(full)
+    for key in lean:
+        assert lean[key] == pytest.approx(full[key], nan_ok=True), key
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda d, s, c, **kw: catchment(d, s, c, D_max=D_MAX, **kw),
+        lambda d, s, c, **kw: voronoi(d, s, c, D_max=D_MAX, **kw),
+        lambda d, s, c, **kw: sfca(d, s, c, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q, **kw),
+        lambda d, s, c, **kw: sfca_e(d, s, c, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q, **kw),
+    ],
+    ids=["catchment", "voronoi", "sfca", "sfca_e"],
+)
+def test_exposure_skips_A_i_and_so_needs_no_capacity(frames, call):
+    """``A_i`` is never computed, so neither is the column it would have required.
+
+    ``coverage`` over the same frames raises, which is what pins the gate down: the
+    difference is the group asked for, not the family or the data.
+    """
+    demand_df, supply_df, cost_df = frames
+    no_capacity = supply_df.drop(columns="capacity")
+    lean = call(demand_df, no_capacity, cost_df, stats=["exposure"], output=())
+    assert lean.stats["sum_E_j"] > 0.0
+    with pytest.raises(ValueError, match="needs a 'capacity' column"):
+        call(demand_df, no_capacity, cost_df, stats=["coverage"], output=())
+
+
+def test_choice_set_alone_computes_neither_exposure_nor_accessibility(prep):
+    """Its keys read only ``G_ij``, so both gates stay shut and neither array is built."""
+    res = sfca(
+        prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q, stats=["choice_set"], output=()
+    )
+    assert res.demand is None and res.supply is None
+    assert res.stats["frac_demand_q_binding"] == pytest.approx(5 / 6)
+
+
 def test_choice_set(prep):
     res = sfca(prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q, stats=["choice_set"])
     s = res.stats

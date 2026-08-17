@@ -21,7 +21,7 @@ from . import _core
 from .compiled import Compiled, _open_rows, _validate_mask
 from .modes import impedance, is_kappa_only, reach_weight
 from .prepare import Prepared, prepare
-from .stats import compute_stats
+from .stats import compute_stats, needs_A_i, needs_E_j
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -287,8 +287,8 @@ def _finish(
             stats,
             prep=prep,
             n_pairs_used=n_pairs_used,
-            E_j=supply_cols["E_j"],
-            A_i=demand_cols["A_i"],
+            E_j=supply_cols["E_j"] if supply_cols is not None else None,
+            A_i=demand_cols["A_i"] if demand_cols is not None else None,
             seg=seg,
             Q=params["Q"],
             G=G,
@@ -386,14 +386,14 @@ def catchment(
     }
 
     demand_cols = supply_cols = None
-    if "supply" in output or stats:
+    if "supply" in output or needs_E_j(stats):
         E_j = _core.group_sum(sel.supply_code, prep.P[sel.demand_code] * sel.f, prep.n_supply)
         supply_cols = {
             "E_j": E_j,
             "R_j": _R_j(prep.S, E_j),
             "n_demand_j": _n_demand_j(sel, prep.n_supply),
         }
-    if "demand" in output or stats:
+    if "demand" in output or needs_A_i(stats):
         S = _require_capacity(prep, "A_i")
         A_i = _core.segment_sum(S[sel.supply_code] * sel.f, sel.seg)
         demand_cols = {"A_i": A_i, "SPAR": _spar(A_i), "n_supply_i": _n_supply_i(sel)}
@@ -497,10 +497,10 @@ def voronoi(
     }
 
     demand_cols = supply_cols = None
-    if "supply" in output or stats:
+    if "supply" in output or needs_E_j(stats):
         n_demand_j = np.bincount(star_supply, minlength=prep.n_supply).astype(np.int64)
         supply_cols = {"E_j": E_j, "R_j": _R_j(prep.S, E_j), "n_demand_j": n_demand_j}
-    if "demand" in output or stats:
+    if "demand" in output or needs_A_i(stats):
         S = _require_capacity(prep, "A_i")
         A_i = np.zeros(prep.n_demand, dtype=np.float64)
         exposure = E_j[star_supply]
@@ -618,7 +618,7 @@ def ifca(
     reached = supply_within_reach > 0
 
     demand_cols = supply_cols = None
-    if "supply" in output or stats:
+    if "supply" in output or needs_E_j(stats):
         # r_i is 0, not inf, for unreached nodes: they contribute nothing to any C_j.
         r_contrib = np.divide(prep.P, supply_within_reach, out=np.zeros(prep.n_demand), where=reached)
         C_j = _core.group_sum(sel.supply_code, r_contrib[sel.demand_code] * sel.f, prep.n_supply)
@@ -628,7 +628,7 @@ def ifca(
             "R_j": _R_j(S, E_j),
             "n_demand_j": _n_demand_j(sel, prep.n_supply),
         }
-    if "demand" in output or stats:
+    if "demand" in output or needs_A_i(stats):
         A_i = np.divide(supply_within_reach, prep.P, out=np.zeros(prep.n_demand), where=reached)
         r_i = np.divide(
             prep.P, supply_within_reach, out=np.full(prep.n_demand, np.inf), where=reached
@@ -742,13 +742,13 @@ def sfca(
     }
 
     demand_cols = supply_cols = None
-    if "supply" in output or stats:
+    if "supply" in output or needs_E_j(stats):
         supply_cols = {
             "E_j": E_j,
             "R_j": _R_j(prep.S, E_j),
             "n_demand_j": _n_demand_j(sel, prep.n_supply),
         }
-    if "demand" in output or stats:
+    if "demand" in output or needs_A_i(stats):
         S = _require_capacity(prep, "A_i")
         # R_j is NaN where E_j == 0, but such a site draws no pair, so 0.0 is safe here.
         R_finite = np.divide(S, E_j, out=np.zeros(prep.n_supply), where=E_j > 0)
@@ -871,14 +871,14 @@ def sfca_e(
     }
 
     demand_cols = supply_cols = None
-    if "supply" in output or stats:
+    if "supply" in output or needs_E_j(stats):
         supply_cols = {
             "E_j": E_j,
             "R_j": _R_j(prep.S, E_j),
             "L_j": _L_j(prep.S, E_j),
             "n_demand_j": _n_demand_j(sel, prep.n_supply),
         }
-    if "demand" in output or stats:
+    if "demand" in output or needs_A_i(stats):
         S = _require_capacity(prep, "A_i")
         # R_j is NaN where E_j == 0, but such a site draws no pair, so 0.0 is safe here.
         R_finite = np.divide(S, E_j, out=np.zeros(prep.n_supply), where=E_j > 0)

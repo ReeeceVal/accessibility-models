@@ -192,7 +192,7 @@ Every page also stands alone as plain markdown in the repo:
 | [families/sfca.md](docs/families/sfca.md) | three-step floating catchment area |
 | [families/sfca-e.md](docs/families/sfca-e.md) | 3SFCA with explicit participation, for optimisation |
 | [outputs.md](docs/outputs.md) | the `Result` object and the full column dictionary |
-| [stats.md](docs/stats.md) | the four optional stat groups |
+| [stats.md](docs/stats.md) | the five optional stat groups |
 | [sweep.md](docs/sweep.md) | grid syntax, labels, result schema |
 
 ## Tests

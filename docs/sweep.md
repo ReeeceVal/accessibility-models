@@ -98,6 +98,11 @@ One row per combination:
 `output=()` is forced. A sweep row is a scalar summary, so per-node and per-site frames
 would be assembled and thrown away. Call the model directly when you want them.
 
+That also makes `stats` the only channel out of a sweep, so pick the groups with the cost
+in mind: when the rows need only supply-side numbers, ask for
+[`exposure`](stats.md#exposure) rather than `coverage` and `A_i` is never computed — the
+bulk of the per-combination work.
+
 No dedup, no persistence, no resume, no evaluation against realised counts. If you need
 something `sweep()` does not do, write the loop yourself — the expensive part is already
 cached in `prep`, which is exactly why no harness is needed here.

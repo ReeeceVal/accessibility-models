@@ -18,9 +18,15 @@ if TYPE_CHECKING:
 
     from .prepare import Prepared
 
-__all__ = ["GROUPS", "compute_stats", "gini"]
+__all__ = ["GROUPS", "compute_stats", "gini", "needs_A_i", "needs_E_j"]
 
-GROUPS = ("coverage", "distribution", "inequality", "choice_set")
+GROUPS = ("coverage", "distribution", "inequality", "exposure", "choice_set")
+
+#: Which model outputs each group reads. A caller that gates ``E_j`` and ``A_i`` on these
+#: skips the work no requested group will look at -- ``A_i`` in particular costs an
+#: O(n_pairs) pass, and its weighted Gini an O(n_demand log n_demand) sort.
+_NEEDS_E_J = frozenset({"coverage", "distribution", "inequality", "exposure"})
+_NEEDS_A_I = frozenset({"coverage", "distribution", "inequality"})
 
 _MOMENTS = {
     "mean": np.mean,
@@ -31,6 +37,16 @@ _MOMENTS = {
     "min": np.min,
     "max": np.max,
 }
+
+
+def needs_E_j(groups: Sequence[str] | None) -> bool:
+    """Whether any requested group reads ``E_j``. False for no groups at all."""
+    return bool(groups) and not _NEEDS_E_J.isdisjoint(groups)
+
+
+def needs_A_i(groups: Sequence[str] | None) -> bool:
+    """Whether any requested group reads ``A_i``. False for no groups at all."""
+    return bool(groups) and not _NEEDS_A_I.isdisjoint(groups)
 
 
 def gini(values: np.ndarray, weights: np.ndarray | None = None) -> float:
@@ -88,11 +104,28 @@ def _coverage(prep: Prepared, n_pairs_used: int, E_j: np.ndarray, A_i: np.ndarra
     }
 
 
+def _moments(name: str, values: np.ndarray) -> dict:
+    return {
+        f"{moment}_{name}": float(fn(values)) if values.size else float("nan")
+        for moment, fn in _MOMENTS.items()
+    }
+
+
+def _exposure(prep: Prepared, E_j: np.ndarray) -> dict:
+    total_demand = float(prep.P.sum())
+    sum_E_j = float(E_j.sum())
+    return {
+        "total_demand": total_demand,
+        "sum_E_j": sum_E_j,
+        "demand_capture_rate": sum_E_j / total_demand if total_demand else float("nan"),
+        "n_supply_zero_exposure": float((E_j == 0).sum()),
+        "gini_E_j": gini(E_j),
+        **_moments("E_j", E_j),
+    }
+
+
 def _distribution(prep: Prepared, E_j: np.ndarray, A_i: np.ndarray) -> dict:
-    out = {}
-    for name, values in (("A_i", A_i), ("E_j", E_j)):
-        for moment, fn in _MOMENTS.items():
-            out[f"{moment}_{name}"] = float(fn(values)) if values.size else float("nan")
+    out = _moments("A_i", A_i) | _moments("E_j", E_j)
     total_demand = prep.P.sum()
     out["weighted_mean_A_i"] = (
         float((prep.P * A_i).sum() / total_demand) if total_demand else float("nan")
@@ -129,8 +162,8 @@ def compute_stats(
     *,
     prep: Prepared,
     n_pairs_used: int,
-    E_j: np.ndarray,
-    A_i: np.ndarray,
+    E_j: np.ndarray | None,
+    A_i: np.ndarray | None,
     seg: np.ndarray,
     Q: int | None = None,
     G: np.ndarray | None = None,
@@ -141,12 +174,16 @@ def compute_stats(
     Parameters
     ----------
     groups : sequence of str
-        Any of ``"coverage"``, ``"distribution"``, ``"inequality"``, ``"choice_set"``.
+        Any of ``"coverage"``, ``"distribution"``, ``"inequality"``, ``"exposure"``,
+        ``"choice_set"``.
     prep : Prepared
     n_pairs_used : int
         Pairs surviving every filter.
-    E_j, A_i : ndarray
-        The model's outputs, before frame assembly.
+    E_j, A_i : ndarray, optional
+        The model's outputs, before frame assembly. May be ``None`` only when no
+        requested group reads them — the caller is expected to have gated their
+        computation on :func:`needs_E_j` and :func:`needs_A_i`, which is the point of
+        those predicates. ``"choice_set"`` alone needs neither.
     seg : ndarray
         Segment offsets over the surviving pairs.
     Q : int, optional
@@ -178,6 +215,8 @@ def compute_stats(
             out.update(_distribution(prep, E_j, A_i))
         elif group == "inequality":
             out.update(_inequality(prep, E_j, A_i))
+        elif group == "exposure":
+            out.update(_exposure(prep, E_j))
         elif group == "choice_set":
             if G is None:
                 raise ValueError(

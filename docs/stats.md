@@ -9,9 +9,15 @@ res = im.sfca(prep, modes=modes, D_max=45, Q=5, tau=0.01,
 res.stats["demand_capture_rate"]
 ```
 
-`res.stats` is `None` unless `stats=[...]` was passed. Requesting stats forces `E_j` and
-`A_i` to be computed even when `output` skips their frames, so `output=()` with
-`stats=[...]` is a valid and cheap combination for a sweep.
+`res.stats` is `None` unless `stats=[...]` was passed. Requesting stats forces the model
+outputs the requested groups actually read — `E_j` for every group but `choice_set`, `A_i`
+for `coverage`, `distribution` and `inequality` — even when `output` skips their frames. So
+`output=()` with `stats=[...]` is a valid and cheap combination for a sweep.
+
+`A_i` is the expensive half: an extra O(`n_pairs`) pass, and `gini_A_i` an
+O(`n_demand` log `n_demand`) sort on top. Request [`exposure`](#exposure) instead of
+`coverage` when you only want supply-side numbers and none of that runs — nor does the
+`capacity` column it would otherwise require.
 
 This is the complete list. Anything richer — correlation against realised counts, dedup,
 persistence — is left to the caller.
@@ -30,6 +36,9 @@ persistence — is left to the caller.
 | `demand_capture_rate` | `sum_E_j / total_demand` |
 | `n_supply_zero_exposure` | count of `j` with `E_j == 0` |
 | `n_demand_zero_access` | count of `i` with `A_i == 0` |
+
+`n_demand_zero_access` is the only key here that reads `A_i`; [`exposure`](#exposure) is
+otherwise this group without it.
 
 `demand_capture_rate` is only meaningful where `E_j` is a **demand count**: Catchment
 without impedance, Voronoi, 3SFCA, and MAC-3SFCA-E. Add a decay to Catchment and it is
@@ -79,6 +88,30 @@ It returns `NaN` rather than `0.0` when the total is zero — no distribution, n
 inequality.
 
 `im.stats.gini(values, weights=None)` is importable on its own.
+
+## `exposure`
+
+The supply side on its own. Every key here also appears in `coverage` or `distribution`;
+what the group buys is what it *does not* compute — no `A_i`, and so no `capacity` column
+required either (except under `ifca()`, where `S_j` is in the denominator regardless).
+
+| Key | Definition |
+|---|---|
+| `sum_E_j` | `Σ_j E_j` |
+| `total_demand` | `Σ_i P_i` |
+| `demand_capture_rate` | `sum_E_j / total_demand` |
+| `n_supply_zero_exposure` | count of `j` with `E_j == 0` |
+| `gini_E_j` | unweighted Gini of `E_j` over supply points |
+| `mean_E_j`, `median_E_j`, `p10_E_j`, `p90_E_j`, `std_E_j`, `min_E_j`, `max_E_j` | as in `distribution` |
+
+`total_demand` is included so `demand_capture_rate` can be recomputed or renormalised from
+a sweep row without also requesting `coverage` — which would pull `A_i` back in and defeat
+the point. The `demand_capture_rate` reading caveats under [`coverage`](#coverage) apply
+here unchanged.
+
+This is the group for an `open_mask` sweep: under `sfca_e()`, `Σ_j E_j` is the classical
+facility-location objective, and this reports it and its distribution across sites without
+touching the demand side.
 
 ## `choice_set`
 
