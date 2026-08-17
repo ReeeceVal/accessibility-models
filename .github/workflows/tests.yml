@@ -1,0 +1,47 @@
+name: tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A force-push to a PR branch supersedes the previous run; don't pay for both.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: pytest (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      # Report every failing version, not just the first — which one broke is the signal.
+      fail-fast: false
+      matrix:
+        # The full range pyproject.toml claims in requires-python. Local dev only ever
+        # exercises the 3.13 pinned in .python-version, so this is what holds the claim up.
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+      # --frozen installs uv.lock exactly as committed, never re-resolving it.
+      - run: uv sync --frozen --python ${{ matrix.python-version }}
+      - run: uv run --frozen pytest
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+      # Catches a pyproject.toml dependency edit that was never re-locked, which the
+      # --frozen installs above would otherwise silently ignore.
+      - run: uv lock --check
+      - run: uv sync --frozen
+      - run: uv run --frozen ruff check
