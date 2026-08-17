@@ -175,11 +175,7 @@ and hands the model a `Compiled`, so a loop over site sets pays only for stages 
 
 ## Documentation
 
-```powershell
-uv run mkdocs serve
-```
-
-Every page also stands alone as plain markdown in the repo:
+Plain markdown in `docs/`:
 
 | Page | Contents |
 |---|---|
