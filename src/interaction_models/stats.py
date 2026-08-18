@@ -111,7 +111,37 @@ def _moments(name: str, values: np.ndarray) -> dict:
     }
 
 
-def _exposure(prep: Prepared, E_j: np.ndarray) -> dict:
+def _supply_ginis(prep: Prepared, E_j: np.ndarray, open_set: np.ndarray | None) -> dict:
+    """The two supply-side concentration measures, over the **open** sites.
+
+    ``gini_E_j`` asks how unevenly demand lands across sites; ``gini_L_j`` asks how
+    unevenly it lands per unit of capacity, which is the operational reading — a site with
+    five units of capacity is expected to absorb more than one with a single unit, and only ``L_j``
+    accounts for that. ``G_ij`` is capacity-blind, so ``gini_E_j`` alone cannot see it.
+
+    Closed sites are excluded rather than counted as zero. A Gini is a concentration
+    measure, so padding it with zeros inflates it directly: counting the sites a network
+    does *not* have would make the coefficient partly a function of how many candidates
+    were declined, and declining to build would read as a fairness cost. Excluding them
+    makes a masked run report what a ``prepare()`` over the open sites alone reports.
+    ``gini_L_j`` drops ``S_j == 0`` for the same reason — the load is undefined there,
+    which is also how the supply frame reports it.
+
+    Shared by ``exposure`` and ``inequality`` so the two cannot drift apart.
+    """
+    S = prep.S
+    if open_set is not None:
+        E_j = E_j[open_set]
+        S = None if S is None else S[open_set]
+    if S is None:
+        gini_L_j = float("nan")  # no capacity column; `exposure` tolerates that
+    else:
+        have = S > 0
+        gini_L_j = gini(E_j[have] / S[have]) if have.any() else float("nan")
+    return {"gini_E_j": gini(E_j), "gini_L_j": gini_L_j}
+
+
+def _exposure(prep: Prepared, E_j: np.ndarray, open_set: np.ndarray | None) -> dict:
     total_demand = float(prep.P.sum())
     sum_E_j = float(E_j.sum())
     return {
@@ -119,7 +149,7 @@ def _exposure(prep: Prepared, E_j: np.ndarray) -> dict:
         "sum_E_j": sum_E_j,
         "demand_capture_rate": sum_E_j / total_demand if total_demand else float("nan"),
         "n_supply_zero_exposure": float((E_j == 0).sum()),
-        "gini_E_j": gini(E_j),
+        **_supply_ginis(prep, E_j, open_set),
         **_moments("E_j", E_j),
     }
 
@@ -133,11 +163,13 @@ def _distribution(prep: Prepared, E_j: np.ndarray, A_i: np.ndarray) -> dict:
     return out
 
 
-def _inequality(prep: Prepared, E_j: np.ndarray, A_i: np.ndarray) -> dict:
+def _inequality(
+    prep: Prepared, E_j: np.ndarray, A_i: np.ndarray, open_set: np.ndarray | None
+) -> dict:
     p10, p90 = np.percentile(A_i, [10, 90]) if A_i.size else (np.nan, np.nan)
     return {
         "gini_A_i": gini(A_i, prep.P),
-        "gini_E_j": gini(E_j),
+        **_supply_ginis(prep, E_j, open_set),
         "p90_p10_ratio_A_i": float(p90 / p10) if p10 else float("inf"),
     }
 
@@ -167,6 +199,7 @@ def compute_stats(
     seg: np.ndarray,
     Q: int | None = None,
     G: np.ndarray | None = None,
+    open_set: np.ndarray | None = None,
     family: str = "",
 ) -> dict[str, float]:
     """Compute the requested statistic groups.
@@ -190,6 +223,9 @@ def compute_stats(
     G : ndarray, optional
         Selection probabilities. Required by ``"choice_set"``, which is why that group is
         only available from Q-restricted families.
+    open_set : ndarray of bool, optional
+        The resolved open sites. ``"exposure"`` and ``"inequality"`` restrict their Gini
+        coefficients to these; omitted, every site counts.
     family : str
         Used only to phrase the error when ``"choice_set"`` is not applicable.
 
@@ -214,9 +250,9 @@ def compute_stats(
         elif group == "distribution":
             out.update(_distribution(prep, E_j, A_i))
         elif group == "inequality":
-            out.update(_inequality(prep, E_j, A_i))
+            out.update(_inequality(prep, E_j, A_i, open_set))
         elif group == "exposure":
-            out.update(_exposure(prep, E_j))
+            out.update(_exposure(prep, E_j, open_set))
         elif group == "choice_set":
             if G is None:
                 raise ValueError(

@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 from conftest import D_MAX, TAU, P, Q, S
 from test_ifca import MAC, SINGLE
+from test_open_mask import SUBSETS, mask_for, restricted
 
 from interaction_models import catchment, ifca, sfca, sfca_e, voronoi
 from interaction_models.stats import gini
@@ -73,7 +74,7 @@ def test_distribution(prep):
 def test_inequality(prep):
     res = sfca(prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q, stats=["inequality"])
     s = res.stats
-    assert set(s) == {"gini_A_i", "gini_E_j", "p90_p10_ratio_A_i"}
+    assert set(s) == {"gini_A_i", "gini_E_j", "gini_L_j", "p90_p10_ratio_A_i"}
     assert 0.0 <= s["gini_A_i"] <= 1.0
     assert s["gini_A_i"] == pytest.approx(
         gini(res.demand["A_i"].to_numpy(), res.demand["demand"].to_numpy())
@@ -101,12 +102,72 @@ def test_exposure(prep):
     assert s["demand_capture_rate"] == pytest.approx(s["sum_E_j"] / sum(P.values()))
     assert s["n_supply_zero_exposure"] == 1  # s4
     assert s["gini_E_j"] == pytest.approx(gini(E_j))
+    assert s["gini_L_j"] == pytest.approx(gini(E_j / np.array(list(S.values()))))
     assert s["p90_E_j"] == pytest.approx(np.percentile(E_j, 90))
     assert set(s) == {
         "sum_E_j", "total_demand", "demand_capture_rate", "n_supply_zero_exposure",
-        "gini_E_j", "mean_E_j", "median_E_j", "p10_E_j", "p90_E_j", "std_E_j",
-        "min_E_j", "max_E_j",
+        "gini_E_j", "gini_L_j", "mean_E_j", "median_E_j", "p10_E_j", "p90_E_j",
+        "std_E_j", "min_E_j", "max_E_j",
     }
+
+
+def test_gini_L_j_is_the_gini_of_the_load_the_supply_frame_reports(prep):
+    """``L_j = E_j / S_j`` — the column MAC-3SFCA-E already emits."""
+    res = sfca_e(prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q, stats=["exposure"])
+    L_j = res.supply["L_j"].to_numpy()
+    assert not np.isnan(L_j).any()  # every site in the toy network has capacity
+    assert res.stats["gini_L_j"] == pytest.approx(gini(L_j))
+
+
+def test_gini_L_j_is_nan_without_a_capacity_column(frames):
+    """``exposure`` must stay usable without capacity, so this degrades rather than raises."""
+    demand_df, supply_df, cost_df = frames
+    res = sfca(demand_df, supply_df.drop(columns="capacity"), cost_df, modes=SINGLE,
+               D_max=D_MAX, tau=TAU, Q=Q, stats=["exposure"], output=())
+    assert res.stats["sum_E_j"] > 0.0
+    assert np.isnan(res.stats["gini_L_j"])
+
+
+def test_gini_L_j_ignores_sites_with_no_capacity(frames):
+    """``L_j`` is undefined at ``S_j == 0``, so it is dropped rather than counted as 0."""
+    demand_df, supply_df, cost_df = frames
+    zeroed = supply_df.copy()
+    zeroed.loc[zeroed["supply_id"] == "s2", "capacity"] = 0.0
+    res = sfca_e(demand_df, zeroed, cost_df, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q,
+                 stats=["exposure"])
+    L_j = res.supply["L_j"].to_numpy()
+    assert np.isnan(L_j).sum() == 1
+    assert res.stats["gini_L_j"] == pytest.approx(gini(L_j[~np.isnan(L_j)]))
+
+
+@pytest.mark.parametrize("keep", SUBSETS, ids=["+".join(s) for s in SUBSETS])
+def test_the_supply_side_ginis_are_scoped_to_the_open_sites(frames, prep, keep):
+    """A masked run must report the inequality of the network it actually describes.
+
+    The reference is the same network with the closed sites removed from the inputs
+    outright — there is no row there to contribute a zero, so matching it is what pins
+    the scoping. Counting closed sites instead would make the coefficients a function of
+    how many candidates were declined, and would let opening any site anywhere look like
+    a fairness gain.
+    """
+    kwargs = {"modes": SINGLE, "D_max": D_MAX, "tau": TAU, "Q": Q,
+              "stats": ["exposure", "inequality"]}
+    masked = sfca_e(prep, open_mask=mask_for(frames[1], keep), **kwargs).stats
+    reference = sfca_e(restricted(frames, keep), **kwargs).stats
+    for key in ("gini_E_j", "gini_L_j"):
+        got, want = masked[key], reference[key]
+        assert (np.isnan(got) and np.isnan(want)) or got == want, key
+
+
+def test_closed_sites_would_otherwise_dominate_the_coefficient(frames, prep):
+    """The bug this scoping avoids, made explicit on the toy network."""
+    mask = mask_for(frames[1], ["s1", "s2"])
+    res = sfca_e(prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q, open_mask=mask,
+                 stats=["exposure"])
+    E_j = res.supply["E_j"].to_numpy()
+    assert (E_j[~mask] == 0).all()
+    assert res.stats["gini_E_j"] == pytest.approx(gini(E_j[mask]))
+    assert res.stats["gini_E_j"] != pytest.approx(gini(E_j))
 
 
 def test_exposure_agrees_with_the_groups_it_overlaps(prep):
