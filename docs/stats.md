@@ -70,8 +70,12 @@ Report `weighted_mean_A_i`.
 | Key | Definition |
 |---|---|
 | `gini_A_i` | demand-weighted Gini of `A_i` over demand nodes |
-| `gini_E_j` | unweighted Gini of `E_j` over supply points |
+| `gini_E_j` | unweighted Gini of `E_j` over open supply points |
+| `gini_L_j` | unweighted Gini of `L_j = E_j / S_j` over open supply points with capacity |
 | `p90_p10_ratio_A_i` | `p90(A_i) / p10(A_i)`; `inf` when `p10 == 0` |
+
+The two supply-side coefficients are shared with [`exposure`](#exposure) and are described
+there.
 
 The Gini is computed from the sorted Lorenz curve,
 
@@ -101,7 +105,8 @@ required either (except under `ifca()`, where `S_j` is in the denominator regard
 | `total_demand` | `Σ_i P_i` |
 | `demand_capture_rate` | `sum_E_j / total_demand` |
 | `n_supply_zero_exposure` | count of `j` with `E_j == 0` |
-| `gini_E_j` | unweighted Gini of `E_j` over supply points |
+| `gini_E_j` | unweighted Gini of `E_j` over open supply points |
+| `gini_L_j` | unweighted Gini of `L_j = E_j / S_j` over open supply points with capacity |
 | `mean_E_j`, `median_E_j`, `p10_E_j`, `p90_E_j`, `std_E_j`, `min_E_j`, `max_E_j` | as in `distribution` |
 
 `total_demand` is included so `demand_capture_rate` can be recomputed or renormalised from
@@ -112,6 +117,34 @@ here unchanged.
 This is the group for an `open_mask` sweep: under `sfca_e()`, `Σ_j E_j` is the classical
 facility-location objective, and this reports it and its distribution across sites without
 touching the demand side.
+
+### `gini_E_j` vs `gini_L_j`
+
+`gini_E_j` asks how unevenly demand lands **across sites**; `gini_L_j` asks how unevenly it
+lands **per unit of capacity**, which is the operational reading — a site with five units of capacity
+is expected to absorb more than one with a single unit. `G_ij` is capacity-blind, so
+`gini_E_j` alone cannot see that. Under `sfca_e()` the pair are the natural equity term to
+set against `sum_E_j`: maximise the total, minimise the concentration.
+
+`gini_L_j` is the one key in this group that reads `capacity`. It returns `NaN` without the
+column rather than raising, so the group stays usable on supply frames that have none.
+
+### Scope: open sites only
+
+Both supply-side coefficients skip sites that [`open_mask`](pipeline.md) closed, and
+`gini_L_j` also skips sites with `S_j == 0`, where the load is undefined. These are
+exclusions rather than zeros, which is what makes the numbers comparable across candidate
+networks: a Gini is a concentration measure, so padding it with zeros inflates it directly.
+Counting the sites a network does *not* have would make the coefficient partly a function
+of how many candidates were declined — declining to build would read as a fairness cost and
+building anywhere at all as a fairness gain. A masked run therefore reports what a genuine
+`prepare()` over the open sites alone reports.
+
+The counts and moments in this group are **not** scoped; `n_supply_zero_exposure` and
+`mean_E_j` still range over every row of `supply_df`, which is what keeps them equal to the
+same keys under `coverage` and `distribution`.
+
+Without an `open_mask` every site is open and the scoping is a no-op.
 
 ## `choice_set`
 

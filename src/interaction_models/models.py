@@ -90,8 +90,13 @@ def _as_prepared(
     return prepare(first, supply_df, cost_df, modes=modes, validate=validate)
 
 
-def _n_open(prep: Prepared, open_mask: np.ndarray | None) -> int | None:
-    return None if open_mask is None else int(np.count_nonzero(open_mask))
+def _open_set(prep: Prepared, open_mask: np.ndarray | None) -> np.ndarray | None:
+    """The resolved open sites, or ``None`` when every site is open."""
+    return _validate_mask(open_mask, prep.n_supply, "open_mask")
+
+
+def _n_open(open_set: np.ndarray | None) -> int | None:
+    return None if open_set is None else int(np.count_nonzero(open_set))
 
 
 def _reject_baked(modes: Sequence[Mode] | None, D_max: float, tau: float) -> None:
@@ -155,25 +160,32 @@ def _resolve(
     use_impedance: bool,
     open_mask: np.ndarray | None,
     validate: bool,
-) -> tuple[Prepared, _Selection, float, float, int, int | None]:
+) -> tuple[Prepared, _Selection, float, float, int, int | None, np.ndarray | None]:
     """Run stages 0-6 from whichever of the three entry points the caller used.
 
-    Returns the prepared inputs, the surviving pairs, and the resolved ``D_max``,
-    ``tau``, ``n_modes`` and ``n_open`` that belong in ``params``.
+    Returns the prepared inputs, the surviving pairs, the resolved ``D_max``, ``tau``,
+    ``n_modes`` and ``n_open`` that belong in ``params``, and the open set those last two
+    were read off — which the ``exposure`` and ``inequality`` statistics need in order to
+    ignore closed sites.
     """
     if isinstance(first, Compiled):
         if supply_df is not None or cost_df is not None:
             raise TypeError("pass either a Compiled or three DataFrames, not both")
         _reject_baked(modes, D_max, tau)
-        n_open = _n_open(first.prep, open_mask)
-        if n_open is None and first.sites is not None:
-            n_open = first.n_sites
+        # A Compiled built with sites=... is already restricted, so that is the open set
+        # whenever the call does not narrow it further.
+        open_set = _open_set(first.prep, open_mask)
+        if open_set is None:
+            open_set = first.sites
         sel = _select_compiled(first, Q, open_mask)
-        return first.prep, sel, first.D_max, first.tau, first.n_modes, n_open
+        return (first.prep, sel, first.D_max, first.tau, first.n_modes,
+                _n_open(open_set), open_set)
 
     prep = _as_prepared(first, supply_df, cost_df, modes, validate)
     sel = _select(prep, modes, D_max, tau, Q, use_impedance, open_mask)
-    return prep, sel, D_max, tau, (len(modes) if modes else 0), _n_open(prep, open_mask)
+    open_set = _open_set(prep, open_mask)
+    return (prep, sel, D_max, tau, (len(modes) if modes else 0),
+            _n_open(open_set), open_set)
 
 
 def _select(
@@ -279,6 +291,7 @@ def _finish(
     seg: np.ndarray,
     family: str,
     G: np.ndarray | None = None,
+    open_set: np.ndarray | None = None,
 ) -> Result:
     """Assemble the frames and, if asked, the statistics."""
     result = _assemble(prep, params, output, demand_cols, supply_cols)
@@ -292,6 +305,7 @@ def _finish(
             seg=seg,
             Q=params["Q"],
             G=G,
+            open_set=open_set,
             family=family,
         )
     return result
@@ -373,7 +387,7 @@ def catchment(
     use_impedance = isinstance(prep, Compiled) or (
         bool(modes) and any(mode.decay is not None for mode in modes)
     )
-    prep, sel, D_max, tau, n_modes, n_open = _resolve(
+    prep, sel, D_max, tau, n_modes, n_open, open_set = _resolve(
         prep, supply_df, cost_df, modes=modes, D_max=D_max, tau=tau, Q=None,
         use_impedance=use_impedance, open_mask=open_mask, validate=validate,
     )
@@ -400,7 +414,7 @@ def catchment(
 
     return _finish(
         prep, params, output, demand_cols, supply_cols,
-        stats=stats, n_pairs_used=sel.n_pairs, seg=sel.seg, family="catchment",
+        stats=stats, n_pairs_used=sel.n_pairs, seg=sel.seg, family="catchment", open_set=open_set,
     )
 
 
@@ -475,6 +489,7 @@ def voronoi(
             "cost_default order, not f_multi order. Pass the Prepared instead."
         )
     prep = _as_prepared(prep, supply_df, cost_df, modes, validate)
+    open_set = _open_set(prep, open_mask)
 
     rows = _open_rows(prep, np.flatnonzero(prep.cost <= D_max), open_mask)
     seg = _core.segment_starts(prep.demand_code[rows], prep.n_demand)
@@ -493,7 +508,7 @@ def voronoi(
         "Q": None,
         "tau": None,
         "n_modes": len(modes) if modes else 0,
-        "n_open": _n_open(prep, open_mask),
+        "n_open": _n_open(open_set),
     }
 
     demand_cols = supply_cols = None
@@ -514,7 +529,7 @@ def voronoi(
     return _finish(
         prep, params, output, demand_cols, supply_cols,
         stats=stats, n_pairs_used=star_rows.size,
-        seg=_core.segment_starts(assigned, prep.n_demand), family="voronoi",
+        seg=_core.segment_starts(assigned, prep.n_demand), family="voronoi", open_set=open_set,
     )
 
 
@@ -601,7 +616,7 @@ def ifca(
     if not modes and not isinstance(prep, Compiled):
         raise ValueError("ifca requires modes=[...]; it is undefined without impedance")
 
-    prep, sel, D_max, tau, n_modes, n_open = _resolve(
+    prep, sel, D_max, tau, n_modes, n_open, open_set = _resolve(
         prep, supply_df, cost_df, modes=modes, D_max=D_max, tau=tau, Q=Q,
         use_impedance=True, open_mask=open_mask, validate=validate,
     )
@@ -643,7 +658,7 @@ def ifca(
     G = _selection_probability(sel) if _wants_choice_set(stats) and _q_is_set(Q) else None
     return _finish(
         prep, params, output, demand_cols, supply_cols,
-        stats=stats, n_pairs_used=sel.n_pairs, seg=sel.seg, family="ifca", G=G,
+        stats=stats, n_pairs_used=sel.n_pairs, seg=sel.seg, family="ifca", G=G, open_set=open_set,
     )
 
 
@@ -726,7 +741,7 @@ def sfca(
     if not _q_is_set(Q) or Q < 1:
         raise ValueError("sfca requires a finite Q >= 1; G_ij is defined over C_Q(i)")
 
-    prep, sel, D_max, tau, n_modes, n_open = _resolve(
+    prep, sel, D_max, tau, n_modes, n_open, open_set = _resolve(
         prep, supply_df, cost_df, modes=modes, D_max=D_max, tau=tau, Q=Q,
         use_impedance=True, open_mask=open_mask, validate=validate,
     )
@@ -757,7 +772,7 @@ def sfca(
 
     return _finish(
         prep, params, output, demand_cols, supply_cols,
-        stats=stats, n_pairs_used=sel.n_pairs, seg=sel.seg, family="sfca", G=G,
+        stats=stats, n_pairs_used=sel.n_pairs, seg=sel.seg, family="sfca", G=G, open_set=open_set,
     )
 
 
@@ -854,7 +869,7 @@ def sfca_e(
     if not _q_is_set(Q) or Q < 1:
         raise ValueError("sfca_e requires a finite Q >= 1; G_ij is defined over C_Q(i)")
 
-    prep, sel, D_max, tau, n_modes, n_open = _resolve(
+    prep, sel, D_max, tau, n_modes, n_open, open_set = _resolve(
         prep, supply_df, cost_df, modes=modes, D_max=D_max, tau=tau, Q=Q,
         use_impedance=True, open_mask=open_mask, validate=validate,
     )
@@ -892,5 +907,5 @@ def sfca_e(
 
     return _finish(
         prep, params, output, demand_cols, supply_cols,
-        stats=stats, n_pairs_used=sel.n_pairs, seg=sel.seg, family="sfca_e", G=G,
+        stats=stats, n_pairs_used=sel.n_pairs, seg=sel.seg, family="sfca_e", G=G, open_set=open_set,
     )
