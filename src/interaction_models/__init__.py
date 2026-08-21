@@ -18,6 +18,7 @@ comes back as ``res.params``. See ``docs/`` for the full reference.
 
 from . import stats
 from .compiled import Compiled, compile_f
+from .explain import explain
 from .models import Result, catchment, ifca, sfca, sfca_e, voronoi
 from .modes import Mode, gaussian
 from .prepare import Prepared, prepare, validate_inputs
@@ -30,6 +31,7 @@ __all__ = [
     "Result",
     "catchment",
     "compile_f",
+    "explain",
     "gaussian",
     "ifca",
     "prepare",
