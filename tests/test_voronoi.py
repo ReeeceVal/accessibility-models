@@ -27,7 +27,8 @@ def run(prep, **kwargs):
 def test_params_report_the_configuration(prep):
     """Voronoi has no impedance, so tau and Q are always None."""
     assert run(prep).params == {
-        "D_max": D_MAX, "Q": None, "tau": None, "n_modes": 0, "n_open": None
+        "D_max": D_MAX, "Q": None, "tau": None, "n_modes": 0, "n_open": None,
+        "n_width_fallback": None,
     }
     assert run(prep, modes=[Mode(share=1.0)]).params["n_modes"] == 1
     assert run(prep, modes=MAC_MODES).params["n_modes"] == 2

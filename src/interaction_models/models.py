@@ -40,8 +40,8 @@ class Result:
     Attributes
     ----------
     params : dict
-        The resolved configuration: ``D_max``, ``Q``, ``tau``, ``n_modes``. Keys that
-        the family does not use are ``None``.
+        The resolved configuration: ``D_max``, ``Q``, ``tau``, ``n_modes``, ``n_open``
+        and ``n_width_fallback``. Keys that the family does not use are ``None``.
     demand : DataFrame or None
         ``demand_id | demand | A_i | SPAR | n_supply_i | <passthrough>``, plus ``r_i``
         for the iFCA family and ``Phi_i`` for MAC-3SFCA-E. ``None`` when ``"demand"`` is
@@ -68,6 +68,9 @@ class _Selection:
     seg: np.ndarray
     demand_code: np.ndarray
     supply_code: np.ndarray
+    n_width_fallback: int | None = None
+    """Demand nodes whose bounded prefix had to be widened. ``None`` unless a
+    ``Compiled`` built with ``width=`` was used."""
 
     @property
     def n_pairs(self) -> int:
@@ -113,28 +116,102 @@ def _reject_baked(modes: Sequence[Mode] | None, D_max: float, tau: float) -> Non
         )
 
 
+def _reject_bare(stats: Sequence[str] | None, output: Sequence[str], bare: bool) -> None:
+    """``bare=True`` returns E_j alone, so anything that shapes a Result is a mistake."""
+    if not bare:
+        return
+    conflicting = [
+        name
+        for name, given in (("stats", stats is not None), ("output", tuple(output) != _DEFAULT_OUTPUT))
+        if given
+    ]
+    if conflicting:
+        raise ValueError(
+            f"bare=True returns E_j only; {' and '.join(conflicting)} cannot be honoured"
+        )
+
+
+def _open_pairs_all(comp: Compiled, mask: np.ndarray | None) -> tuple:
+    """The open pairs, their demand codes and segment offsets, reading every row.
+
+    Costs one pass over all ``n_pairs``, whatever the open set.
+    """
+    if mask is None:
+        sel = np.arange(comp.n_pairs, dtype=np.int64)
+    else:
+        sel = np.flatnonzero(mask[comp.supply_code])
+    demand_code = comp.demand_code[sel]
+    return sel, demand_code, _core.segment_starts(demand_code, comp.prep.n_demand), None
+
+
+def _open_pairs_width(comp: Compiled, mask: np.ndarray | None, Q: int) -> tuple:
+    """The same, reading only each node's bounded prefix, plus the nodes it re-read.
+
+    A node is a *violator* when its prefix holds fewer than ``Q`` open rows **and** hid
+    some — only then can part of ``C_Q(i)`` lie outside the prefix. A violator has its
+    hidden tail read and spliced in; one retry is enough, because a node whose whole
+    segment has been read is no longer truncated and so cannot violate again.
+    """
+    if Q > comp.width:
+        # Every truncated node violates by arithmetic (open <= k = width < Q), so the
+        # bounded pass would be pure waste. Go straight to the unbounded read.
+        sel, demand_code, seg, _ = _open_pairs_all(comp, mask)
+        return sel, demand_code, seg, int(np.count_nonzero(comp.truncated))
+
+    def read(seg: np.ndarray, k: np.ndarray) -> np.ndarray:
+        rows = _core.segment_prefix_rows(seg, k)
+        return rows if mask is None else rows[mask[comp.supply_code[rows]]]
+
+    sel = read(comp.seg, comp.k)
+    demand_code = comp.demand_code[sel]
+    seg = _core.segment_starts(demand_code, comp.prep.n_demand)
+
+    violator = comp.truncated & (_core.segment_lengths(seg) < Q)
+    n_fallback = int(np.count_nonzero(violator))
+    if n_fallback:
+        # Re-read the hidden tail of each violator only, never the whole bounded pass
+        # again: a handful of violators would otherwise double the cost of every node.
+        # A tail row sorts after its own segment's prefix and before the next segment,
+        # so sorting the union by row index restores the compiled order exactly, and the
+        # result is the same rows in the same order a full read would have produced.
+        # Fresh arrays throughout — revising comp.k in place would leave the Compiled
+        # widened for every later open set, right on this call and wrong on the next.
+        tail_seg = comp.seg.copy()
+        tail_seg[:-1] += comp.k
+        tail_k = np.where(violator, _core.segment_lengths(comp.seg) - comp.k, 0)
+        sel = np.sort(np.concatenate([sel, read(tail_seg, tail_k)]), kind="stable")
+        demand_code = comp.demand_code[sel]
+        seg = _core.segment_starts(demand_code, comp.prep.n_demand)
+    return sel, demand_code, seg, n_fallback
+
+
 def _select_compiled(comp: Compiled, Q: int | None, open_mask: np.ndarray | None) -> _Selection:
     """Stages 0 and 6 over an already-compiled ``f_multi``.
 
     No impedance and no sort: the compiled rows are already ``f``-descending within each
     segment, and masking preserves relative order, so the rank is a prefix truncation
-    whatever the mode set.
+    whatever the mode set. A ``width`` bounds how much of each segment is read to find it,
+    without changing which rows come back.
     """
     mask = _validate_mask(open_mask, comp.prep.n_supply, "open_mask")
-    if mask is None:
-        sel = np.arange(comp.n_pairs, dtype=np.int64)
+    if mask is not None and comp.sites is not None and (mask & ~comp.sites).any():
+        raise ValueError(
+            "open_mask selects sites excluded by compile_f(sites=...); it must be a "
+            "subset of the sites the Compiled was built over"
+        )
+
+    bounded_Q = Q is not None and np.isfinite(Q)
+    if comp.width is None:
+        sel, demand_code, seg, n_width_fallback = _open_pairs_all(comp, mask)
+    elif not bounded_Q:
+        raise ValueError(
+            f"a Compiled built with width={comp.width} needs a finite Q: the width bounds "
+            "each node's candidate list on the promise that only its top Q is ever read"
+        )
     else:
-        if comp.sites is not None and (mask & ~comp.sites).any():
-            raise ValueError(
-                "open_mask selects sites excluded by compile_f(sites=...); it must be a "
-                "subset of the sites the Compiled was built over"
-            )
-        sel = np.flatnonzero(mask[comp.supply_code])
+        sel, demand_code, seg, n_width_fallback = _open_pairs_width(comp, mask, int(Q))
 
-    demand_code = comp.demand_code[sel]
-    seg = _core.segment_starts(demand_code, comp.prep.n_demand)
-
-    if Q is not None and np.isfinite(Q):
+    if bounded_Q:
         keep = _core.segment_position(seg, sel.size) < Q
         sel, demand_code = sel[keep], demand_code[keep]
         seg = _core.segment_starts(demand_code, comp.prep.n_demand)
@@ -145,6 +222,7 @@ def _select_compiled(comp: Compiled, Q: int | None, open_mask: np.ndarray | None
         seg=seg,
         demand_code=demand_code,
         supply_code=comp.supply_code[sel],
+        n_width_fallback=n_width_fallback,
     )
 
 
@@ -332,9 +410,10 @@ def catchment(
     tau: float = 0.0,
     open_mask: np.ndarray | None = None,
     stats: Sequence[str] | None = None,
+    bare: bool = False,
     output: Sequence[str] = _DEFAULT_OUTPUT,
     validate: bool = True,
-) -> Result:
+) -> Result | np.ndarray:
     """Cumulative-opportunity catchment, with no competition between sites.
 
     Every site accumulates the demand of every node that can reach it within ``D_max``.
@@ -366,6 +445,10 @@ def catchment(
         One flag per row of ``supply_df``. Closed sites are dropped before every other
         stage, so results match those of re-running on a ``cost_df`` restricted to the
         open sites. Output frames keep their full length, with zeros at closed sites.
+    bare : bool, default False
+        Return ``E_j`` alone — one float64 value per row of ``supply_df`` — skipping
+        ``R_j``, ``n_demand_j``, the frames, ``params`` and the ``Result`` itself. For a
+        loop that reads nothing else. Cannot be combined with ``stats`` or ``output``.
     output : sequence of str, default ("demand", "supply")
         Which frames to assemble.
     validate : bool, default True
@@ -373,7 +456,7 @@ def catchment(
 
     Returns
     -------
-    Result
+    Result, or an ndarray of float64 over the supply rows when ``bare=True``
 
     Raises
     ------
@@ -384,6 +467,7 @@ def catchment(
     --------
     docs/families/catchment.md
     """
+    _reject_bare(stats, output, bare)
     use_impedance = isinstance(prep, Compiled) or (
         bool(modes) and any(mode.decay is not None for mode in modes)
     )
@@ -397,11 +481,14 @@ def catchment(
         "tau": tau if use_impedance else None,
         "n_modes": n_modes,
         "n_open": n_open,
+        "n_width_fallback": sel.n_width_fallback,
     }
 
     demand_cols = supply_cols = None
-    if "supply" in output or needs_E_j(stats):
+    if bare or "supply" in output or needs_E_j(stats):
         E_j = _core.group_sum(sel.supply_code, prep.P[sel.demand_code] * sel.f, prep.n_supply)
+        if bare:
+            return E_j
         supply_cols = {
             "E_j": E_j,
             "R_j": _R_j(prep.S, E_j),
@@ -444,9 +531,10 @@ def voronoi(
     D_max: float = np.inf,
     open_mask: np.ndarray | None = None,
     stats: Sequence[str] | None = None,
+    bare: bool = False,
     output: Sequence[str] = _DEFAULT_OUTPUT,
     validate: bool = True,
-) -> Result:
+) -> Result | np.ndarray:
     """Closest-facility assignment: all of a node's demand goes to its nearest site.
 
     ``j*(i) = argmin_{j in C_D(i)} cost_default``. Ties break on the lowest supply code,
@@ -471,18 +559,23 @@ def voronoi(
     open_mask : ndarray of bool, optional
         One flag per row of ``supply_df``. Closed sites cannot be assigned, so ``j*(i)``
         is the nearest **open** site.
+    bare : bool, default False
+        Return ``E_j`` alone — one float64 value per row of ``supply_df`` — skipping
+        ``R_j``, ``n_demand_j``, the frames, ``params`` and the ``Result`` itself. For a
+        loop that reads nothing else. Cannot be combined with ``stats`` or ``output``.
     output : sequence of str, default ("demand", "supply")
     validate : bool, default True
 
     Returns
     -------
-    Result
+    Result, or an ndarray of float64 over the supply rows when ``bare=True``
         ``n_supply_i`` is 1 for an assigned node and 0 for an unreachable one.
 
     See Also
     --------
     docs/families/voronoi.md
     """
+    _reject_bare(stats, output, bare)
     if isinstance(prep, Compiled):
         raise TypeError(
             "voronoi does not accept a Compiled: it has no impedance and assigns on "
@@ -503,12 +596,15 @@ def voronoi(
         else np.ones(star_rows.size, dtype=np.float64)
     )
     E_j = _core.group_sum(star_supply, prep.P[assigned] * w, prep.n_supply)
+    if bare:
+        return E_j
     params = {
         "D_max": D_max,
         "Q": None,
         "tau": None,
         "n_modes": len(modes) if modes else 0,
         "n_open": _n_open(open_set),
+        "n_width_fallback": None,
     }
 
     demand_cols = supply_cols = None
@@ -555,9 +651,10 @@ def ifca(
     Q: int | None = None,
     open_mask: np.ndarray | None = None,
     stats: Sequence[str] | None = None,
+    bare: bool = False,
     output: Sequence[str] = _DEFAULT_OUTPUT,
     validate: bool = True,
-) -> Result:
+) -> Result | np.ndarray:
     """Inverted floating catchment area (Wang 2018), with competition for demand.
 
     A node first works out how thinly its demand is spread across the capacity it can
@@ -587,12 +684,16 @@ def ifca(
     open_mask : ndarray of bool, optional
         One flag per row of ``supply_df``. Closed sites are dropped before ``r_i``'s
         denominator is formed, so they neither absorb demand nor dilute it.
+    bare : bool, default False
+        Return ``E_j`` alone — one float64 value per row of ``supply_df`` — skipping
+        ``R_j``, ``n_demand_j``, the frames, ``params`` and the ``Result`` itself. For a
+        loop that reads nothing else. Cannot be combined with ``stats`` or ``output``.
     output : sequence of str, default ("demand", "supply")
     validate : bool, default True
 
     Returns
     -------
-    Result
+    Result, or an ndarray of float64 over the supply rows when ``bare=True``
         The demand frame carries ``r_i`` alongside ``A_i``.
 
     Raises
@@ -613,6 +714,7 @@ def ifca(
     --------
     docs/families/ifca.md
     """
+    _reject_bare(stats, output, bare)
     if not modes and not isinstance(prep, Compiled):
         raise ValueError("ifca requires modes=[...]; it is undefined without impedance")
 
@@ -627,17 +729,20 @@ def ifca(
         "tau": tau,
         "n_modes": n_modes,
         "n_open": n_open,
+        "n_width_fallback": sel.n_width_fallback,
     }
 
     supply_within_reach = _core.segment_sum(S[sel.supply_code] * sel.f, sel.seg)
     reached = supply_within_reach > 0
 
     demand_cols = supply_cols = None
-    if "supply" in output or needs_E_j(stats):
+    if bare or "supply" in output or needs_E_j(stats):
         # r_i is 0, not inf, for unreached nodes: they contribute nothing to any C_j.
         r_contrib = np.divide(prep.P, supply_within_reach, out=np.zeros(prep.n_demand), where=reached)
         C_j = _core.group_sum(sel.supply_code, r_contrib[sel.demand_code] * sel.f, prep.n_supply)
         E_j = S * C_j
+        if bare:
+            return E_j
         supply_cols = {
             "E_j": E_j,
             "R_j": _R_j(S, E_j),
@@ -686,9 +791,10 @@ def sfca(
     Q: int,
     open_mask: np.ndarray | None = None,
     stats: Sequence[str] | None = None,
+    bare: bool = False,
     output: Sequence[str] = _DEFAULT_OUTPUT,
     validate: bool = True,
-) -> Result:
+) -> Result | np.ndarray:
     """Three-step floating catchment area, with a demand-side selection step.
 
     Each node distributes its demand across its choice set in proportion to relative
@@ -719,12 +825,16 @@ def sfca(
         One flag per row of ``supply_df``. Closed sites are dropped before the rank, so
         ``C_Q(i)`` is the top ``Q`` **open** options — not the open members of the
         top ``Q`` overall.
+    bare : bool, default False
+        Return ``E_j`` alone — one float64 value per row of ``supply_df`` — skipping
+        ``R_j``, ``n_demand_j``, the frames, ``params`` and the ``Result`` itself. For a
+        loop that reads nothing else. Cannot be combined with ``stats`` or ``output``.
     output : sequence of str, default ("demand", "supply")
     validate : bool, default True
 
     Returns
     -------
-    Result
+    Result, or an ndarray of float64 over the supply rows when ``bare=True``
 
     Raises
     ------
@@ -736,6 +846,7 @@ def sfca(
     --------
     docs/families/sfca.md
     """
+    _reject_bare(stats, output, bare)
     if not modes and not isinstance(prep, Compiled):
         raise ValueError("sfca requires modes=[...]")
     if not _q_is_set(Q) or Q < 1:
@@ -748,12 +859,15 @@ def sfca(
     G = _selection_probability(sel)
     drawn = prep.P[sel.demand_code] * G * sel.f
     E_j = _core.group_sum(sel.supply_code, drawn, prep.n_supply)
+    if bare:
+        return E_j
     params = {
         "D_max": D_max,
         "Q": Q,
         "tau": tau,
         "n_modes": n_modes,
         "n_open": n_open,
+        "n_width_fallback": sel.n_width_fallback,
     }
 
     demand_cols = supply_cols = None
@@ -790,9 +904,10 @@ def sfca_e(
     Q: int,
     open_mask: np.ndarray | None = None,
     stats: Sequence[str] | None = None,
+    bare: bool = False,
     output: Sequence[str] = _DEFAULT_OUTPUT,
     validate: bool = True,
-) -> Result:
+) -> Result | np.ndarray:
     """Three-step FCA with an explicit participation step, monotone under site openings.
 
     3SFCA lets ``f_ij`` govern both *which* site a node selects and *whether* it travels
@@ -834,12 +949,16 @@ def sfca_e(
         not the open members of the top ``Q`` overall. This is the site-selection lever:
         ``Σ_j E_j`` is monotone in it, and results are identical to re-running on a
         ``cost_df`` restricted to the open sites, at a fraction of the cost.
+    bare : bool, default False
+        Return ``E_j`` alone — one float64 value per row of ``supply_df`` — skipping
+        ``R_j``, ``n_demand_j``, the frames, ``params`` and the ``Result`` itself. For a
+        loop that reads nothing else. Cannot be combined with ``stats`` or ``output``.
     output : sequence of str, default ("demand", "supply")
     validate : bool, default True
 
     Returns
     -------
-    Result
+    Result, or an ndarray of float64 over the supply rows when ``bare=True``
         The demand frame carries ``Phi_i`` alongside ``A_i``; the supply frame carries
         ``L_j`` alongside ``R_j``.
 
@@ -864,6 +983,7 @@ def sfca_e(
     --------
     docs/families/sfca-e.md
     """
+    _reject_bare(stats, output, bare)
     if not modes and not isinstance(prep, Compiled):
         raise ValueError("sfca_e requires modes=[...]")
     if not _q_is_set(Q) or Q < 1:
@@ -877,12 +997,15 @@ def sfca_e(
     Phi_i = _core.segment_max(sel.f, sel.seg)
     drawn = prep.P[sel.demand_code] * Phi_i[sel.demand_code] * G
     E_j = _core.group_sum(sel.supply_code, drawn, prep.n_supply)
+    if bare:
+        return E_j
     params = {
         "D_max": D_max,
         "Q": Q,
         "tau": tau,
         "n_modes": n_modes,
         "n_open": n_open,
+        "n_width_fallback": sel.n_width_fallback,
     }
 
     demand_cols = supply_cols = None

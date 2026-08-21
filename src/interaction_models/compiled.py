@@ -57,6 +57,16 @@ class Compiled:
     sites : ndarray of bool or None, shape (n_supply,)
         The permanent site restriction this was compiled under, if any. An ``open_mask``
         passed to a model must be a subset of it.
+    width : int or None
+        The per-node candidate bound this was compiled under. Rows are **not** dropped —
+        every pair surviving ``sites``, ``D_max`` and ``tau`` is still here, and the
+        memory is unchanged. The width is a promise about how many of them a model call
+        has to *read*, kept by ``k`` and checked by ``truncated``.
+    k : ndarray of int64 or None, shape (n_demand,)
+        ``min(segment_length, width)`` — the prefix a model call reads first. Read-only.
+    truncated : ndarray of bool or None, shape (n_demand,)
+        Whether ``k`` hides rows from a node. Only a truncated node can ever need
+        re-reading. Read-only.
     """
 
     prep: Prepared
@@ -68,6 +78,9 @@ class Compiled:
     tau: float
     n_modes: int
     sites: np.ndarray | None = None
+    width: int | None = None
+    k: np.ndarray | None = None
+    truncated: np.ndarray | None = None
 
     @property
     def n_pairs(self) -> int:
@@ -82,7 +95,7 @@ class Compiled:
         return (
             f"Compiled(n_pairs={self.n_pairs}, n_demand={self.prep.n_demand}, "
             f"n_sites={self.n_sites}, D_max={self.D_max}, tau={self.tau}, "
-            f"n_modes={self.n_modes})"
+            f"n_modes={self.n_modes}, width={self.width})"
         )
 
 
@@ -119,6 +132,7 @@ def compile_f(
     D_max: float = np.inf,
     tau: float = 0.0,
     sites: np.ndarray | None = None,
+    width: int | None = None,
 ) -> Compiled:
     """Resolve ``f_multi`` and the rank order once, for reuse across many open sets.
 
@@ -140,6 +154,14 @@ def compile_f(
         decay evaluations so the excluded pairs cost nothing to compile. Use this when
         the network is fixed and the parameters vary; use the model's ``open_mask``
         when the network is what varies. An ``open_mask`` must be a subset of it.
+    width : int, optional
+        Bound the candidate list a model call reads to the top ``width`` per demand
+        node. No rows are dropped — the saving is in what a call *visits*, not in what
+        it stores. A node whose bounded prefix turns out to hold fewer than ``Q``
+        **open** options has its hidden tail read and spliced in, so results stay
+        bit-for-bit identical to ``width=None``; ``params["n_width_fallback"]`` counts
+        how often that happened. Requires a finite ``Q`` at call time — an unbounded choice set
+        cannot be truncated.
 
     Returns
     -------
@@ -148,8 +170,8 @@ def compile_f(
     Raises
     ------
     ValueError
-        If ``modes`` is empty, or ``sites`` is not a boolean array of one flag per row
-        of ``supply_df``.
+        If ``modes`` is empty, ``sites`` is not a boolean array of one flag per row of
+        ``supply_df``, or ``width`` is not a positive integer.
 
     Notes
     -----
@@ -162,7 +184,14 @@ def compile_f(
     Results are identical to the uncompiled call, and bit-for-bit so on the kappa-only
     fast path. Where a mode carries its own cost column the compiled rows are physically
     reordered, so float accumulation runs in a different order and sums can differ in the
-    last ulp.
+    last ulp. ``width`` does not add to that: it changes which rows are *read*, never
+    their order, so a bounded call matches its own unbounded compile exactly.
+
+    ``width`` pays off in proportion to how many sites are open. A node needs ``Q`` of
+    its top ``width`` to be open, so a network of open density ``d`` wants
+    ``width >> Q / d``; below that most truncated nodes fall back and the bounded pass
+    is wasted work on top of the full one. It is a tool for dense open sets — local
+    search around an incumbent — not for greedy construction from an empty network.
 
     Examples
     --------
@@ -172,6 +201,11 @@ def compile_f(
     """
     if not modes:
         raise ValueError("compile_f requires modes=[...]; f_multi is undefined without them")
+    if width is not None and (
+        isinstance(width, bool) or not isinstance(width, (int, np.integer)) or width < 1
+    ):
+        # bool is an int subclass, so width=True would otherwise compile at width=1.
+        raise ValueError(f"width must be a positive integer, got {width!r}")
 
     site_mask = _validate_mask(sites, prep.n_supply, "sites")
     rows = np.flatnonzero(prep.cost <= D_max)
@@ -190,14 +224,30 @@ def compile_f(
         order = np.lexsort((-f, demand_code))
         rows, f, demand_code = rows[order], f[order], demand_code[order]
 
+    seg = _core.segment_starts(demand_code, prep.n_demand)
+    if width is None:
+        k = truncated = None
+    else:
+        width = int(width)
+        lengths = _core.segment_lengths(seg)
+        k, truncated = np.minimum(lengths, width), lengths > width
+        # A model call revises k for the nodes it has to re-read. Freezing these makes
+        # that a fresh array by force: revising them in place would leave the Compiled
+        # wrong for every later open set.
+        k.setflags(write=False)
+        truncated.setflags(write=False)
+
     return Compiled(
         prep=prep,
         f=f,
         demand_code=demand_code,
         supply_code=prep.supply_code[rows],
-        seg=_core.segment_starts(demand_code, prep.n_demand),
+        seg=seg,
         D_max=D_max,
         tau=tau,
         n_modes=len(modes),
         sites=site_mask,
+        width=width,
+        k=k,
+        truncated=truncated,
     )

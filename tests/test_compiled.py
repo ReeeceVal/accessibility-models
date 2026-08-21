@@ -155,7 +155,8 @@ def test_parameters_baked_into_the_compile_are_rejected(prep, kwargs, match):
 def test_params_come_from_the_compile(prep):
     comp = compile_f(prep, modes=MAC, D_max=D_MAX, tau=TAU)
     params = sfca_e(comp, Q=2).params
-    assert params == {"D_max": D_MAX, "Q": 2, "tau": TAU, "n_modes": 2, "n_open": None}
+    assert params == {"D_max": D_MAX, "Q": 2, "tau": TAU, "n_modes": 2, "n_open": None,
+                      "n_width_fallback": None}
 
 
 def test_voronoi_rejects_a_compiled(prep):

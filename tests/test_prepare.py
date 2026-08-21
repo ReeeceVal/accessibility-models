@@ -43,6 +43,36 @@ def test_segment_lengths_and_position_match_pandas(big):
     )
 
 
+def test_segment_prefix_rows_takes_the_first_k_of_each_segment(big):
+    """The bounded read: only positions 0:k[g] of each segment come back."""
+    codes, _, n_groups = big
+    seg = _core.segment_starts(codes, n_groups)
+    rng = np.random.default_rng(1)
+    k = np.minimum(_core.segment_lengths(seg), rng.integers(0, 4, size=n_groups))
+    expected = np.concatenate(
+        [np.arange(seg[g], seg[g] + k[g]) for g in range(n_groups)]
+    ).astype(np.int64)
+    np.testing.assert_array_equal(_core.segment_prefix_rows(seg, k), expected)
+
+
+def test_segment_prefix_rows_with_full_k_is_every_row(big):
+    codes, _, n_groups = big
+    seg = _core.segment_starts(codes, n_groups)
+    np.testing.assert_array_equal(
+        _core.segment_prefix_rows(seg, _core.segment_lengths(seg)),
+        np.arange(codes.size),
+    )
+
+
+def test_segment_prefix_rows_of_nothing_is_an_empty_int64_index(big):
+    """A float64 empty would raise the moment it was used as a fancy index."""
+    codes, _, n_groups = big
+    seg = _core.segment_starts(codes, n_groups)
+    rows = _core.segment_prefix_rows(seg, np.zeros(n_groups, dtype=np.int64))
+    assert rows.size == 0
+    assert rows.dtype == np.int64
+
+
 def test_segment_rank_desc_matches_pandas(big):
     codes, values, n_groups = big
     seg = _core.segment_starts(codes, n_groups)
