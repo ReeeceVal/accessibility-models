@@ -121,11 +121,11 @@ synthetic 4M-pair matrix (20k demand nodes, ~74 candidates each after `D_max` an
 
 | open density | fallbacks | per call |
 |---|---|---|
-| 0.20 | 12,605 | 1.68× — **slower** |
-| 0.35 | 2,218 | 0.99× |
-| 0.50 | 85 | 0.71× |
-| 0.80 | 0 | 0.55× |
-| 1.00 | 0 | 0.45× |
+| 0.20 | 12,605 | 1.91× — **slower** |
+| 0.35 | 2,218 | 1.21× |
+| 0.50 | 85 | 0.90× |
+| 0.80 | 0 | 0.71× |
+| 1.00 | 0 | 0.62× |
 
 `params["n_width_fallback"]` is the instrument: it counts the nodes re-read on that call.
 Persistently far from zero means `width` is too small for the density being explored —
@@ -183,9 +183,9 @@ one contiguous, cost-ascending segment. When **every mode travels on `cost_defau
 each `decay` is non-increasing, `f_multi` is a monotone function of `cost_default`, which
 means that segment order *already is* the `f_multi`-descending rank order.
 
-Stages 1, 5 and 6 then reduce to **prefix truncations** of a segment. Top-`Q` costs one
-`arange` subtraction rather than a sort, and it costs the same whatever `Q` you pass. This
-is the dominant case.
+Stages 1, 5 and 6 then reduce to **prefix truncations** of a segment. Stage 6 materialises
+each segment's first `Q` rows directly rather than sorting, so it costs `O(Q · n_demand)` —
+what it keeps, not what it reads. This is the dominant case.
 
 When a mode carries **its own cost column** (walking, say), `f_multi` is no longer monotone
 in `cost_default` and top-`Q` needs one `lexsort` over the surviving pairs per call.

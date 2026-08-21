@@ -131,6 +131,19 @@ def _reject_bare(stats: Sequence[str] | None, output: Sequence[str], bare: bool)
         )
 
 
+def _prefix_to_q(seg: np.ndarray, Q: int) -> tuple[np.ndarray, np.ndarray]:
+    """Stage 6 where the rows are already ``f``-descending: the first ``Q`` of each segment.
+
+    Returns the rows to keep and the segment offsets they leave behind. Equivalent to
+    ``segment_position(seg, n_rows) < Q``, but that labels every row with its position and
+    then filters, which is ``O(n_rows)``; this touches only the rows it keeps, which is
+    ``O(n_groups + Q*n_groups)``. On a wide network most of what a call reads is rows
+    stage 6 is about to discard, so the difference is most of the read.
+    """
+    lengths = np.minimum(_core.segment_lengths(seg), Q)
+    return _core.segment_prefix_rows(seg, lengths), _core.segment_starts_from_lengths(lengths)
+
+
 def _open_pairs_all(comp: Compiled, mask: np.ndarray | None) -> tuple:
     """The open pairs, their demand codes and segment offsets, reading every row.
 
@@ -200,21 +213,22 @@ def _select_compiled(comp: Compiled, Q: int | None, open_mask: np.ndarray | None
             "subset of the sites the Compiled was built over"
         )
 
-    bounded_Q = Q is not None and np.isfinite(Q)
+    # How many rows stage 6 keeps per node. ceil, because the filter it replaces is
+    # ``rank < Q``, which on a fractional Q keeps one row more than truncating would.
+    n_take = int(np.ceil(Q)) if Q is not None and np.isfinite(Q) else None
     if comp.width is None:
         sel, demand_code, seg, n_width_fallback = _open_pairs_all(comp, mask)
-    elif not bounded_Q:
+    elif n_take is None:
         raise ValueError(
             f"a Compiled built with width={comp.width} needs a finite Q: the width bounds "
             "each node's candidate list on the promise that only its top Q is ever read"
         )
     else:
-        sel, demand_code, seg, n_width_fallback = _open_pairs_width(comp, mask, int(Q))
+        sel, demand_code, seg, n_width_fallback = _open_pairs_width(comp, mask, n_take)
 
-    if bounded_Q:
-        keep = _core.segment_position(seg, sel.size) < Q
+    if n_take is not None:
+        keep, seg = _prefix_to_q(seg, n_take)
         sel, demand_code = sel[keep], demand_code[keep]
-        seg = _core.segment_starts(demand_code, comp.prep.n_demand)
 
     return _Selection(
         rows=sel,
@@ -298,12 +312,13 @@ def _select(
                 stacklevel=3,
             )
         if kappa_only:
-            rank = _core.segment_position(seg, rows.size)
+            keep, seg = _prefix_to_q(seg, int(np.ceil(Q)))
+            rows, f, demand_code = rows[keep], f[keep], demand_code[keep]
         else:
-            rank = _core.segment_rank_desc(f, demand_code, seg)
-        keep = rank < Q
-        rows, f, demand_code = rows[keep], f[keep], demand_code[keep]
-        seg = _core.segment_starts(demand_code, prep.n_demand)
+            # Rank by f_multi is not rank by position here, so every row must be labelled.
+            keep = _core.segment_rank_desc(f, demand_code, seg) < Q
+            rows, f, demand_code = rows[keep], f[keep], demand_code[keep]
+            seg = _core.segment_starts(demand_code, prep.n_demand)
 
     return _Selection(
         rows=rows,
