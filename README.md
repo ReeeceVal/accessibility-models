@@ -192,7 +192,7 @@ Plain markdown in `docs/`:
 | [families/sfca.md](docs/families/sfca.md) | three-step floating catchment area |
 | [families/sfca-e.md](docs/families/sfca-e.md) | 3SFCA with explicit participation, for optimisation |
 | [outputs.md](docs/outputs.md) | the `Result` object and the full column dictionary |
-| [explain.md](docs/explain.md) | per-pair terms for one demand node, without materialising the pair table |
+| [explain.md](docs/explain.md) | per-pair terms for one demand node or one supply point, without materialising the pair table |
 | [stats.md](docs/stats.md) | the five optional stat groups |
 | [sweep.md](docs/sweep.md) | grid syntax, labels, result schema |
 
@@ -215,7 +215,7 @@ src/interaction_models/
     modes.py       Mode, gaussian(), f_multi assembly + NaN renormalisation
     _core.py       segmented numpy primitives (no domain concepts)
     models.py      catchment(), voronoi(), ifca(), sfca(), sfca_e(); Result assembly
-    explain.py     explain(); per-pair terms for one demand node
+    explain.py     explain(); per-pair terms for one demand node or one supply point
     stats.py       optional stat groups
     sweep.py       sweep()
 ```

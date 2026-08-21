@@ -102,7 +102,8 @@ Three things to notice:
 * [Modes](modes.md) — impedance, mode shares, and the availability/reachability split
 * [The pipeline](pipeline.md) — the seven stages, and which families run which
 * [Outputs](outputs.md) — the `Result` object and every column it can emit
-* [Explain](explain.md) — the per-pair terms behind one demand node's `A_i`
+* [Explain](explain.md) — the per-pair terms behind one demand node's `A_i`, or one
+  supply point's `E_j`
 * [Sweep](sweep.md) — running a grid over one `Prepared`
 
 Choosing a family for a **site-selection optimisation** rather than for estimation over a
