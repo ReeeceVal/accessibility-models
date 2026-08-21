@@ -186,6 +186,108 @@ def test_compiled_rejects_baked_parameters(prep):
         explain(comp, family="sfca", demand_id="d1", modes=MAC, Q=Q)
 
 
+def _by_demand_subset(prep, family, supply_id, **kwargs):
+    """The rows demand_id-scoped explain() would give for ``supply_id``, sorted to match
+    supply_id-scoped explain()'s own ordering -- weight descending, cost_default
+    ascending. Concatenating a mix of empty and non-empty per-node frames can leave the
+    id columns as ``object`` on one side and pandas' string dtype on the other (a
+    pre-existing quirk of the demand_id path, not specific to either axis), so callers
+    compare with ``check_dtype=False``.
+    """
+    frame = explain(prep, family=family, demand_id=list(P), **kwargs)
+    frame = frame[frame["supply_id"] == supply_id]
+    return frame.sort_values(["weight", "cost_default"], ascending=[False, True]).reset_index(
+        drop=True
+    )
+
+
+def test_supply_id_and_demand_id_are_mutually_exclusive(prep):
+    with pytest.raises(ValueError, match="exactly one"):
+        explain(prep, family="sfca", modes=MAC, Q=Q)
+    with pytest.raises(ValueError, match="exactly one"):
+        explain(prep, family="sfca", demand_id="d1", supply_id="s1", modes=MAC, Q=Q)
+
+
+def test_unknown_supply_id_is_rejected(prep):
+    with pytest.raises(ValueError, match="not found"):
+        explain(prep, family="sfca", supply_id="zzz", modes=MAC, Q=Q)
+
+
+def test_supply_id_sfca_matches_the_demand_id_view(prep):
+    got = explain(prep, family="sfca", supply_id="s1", modes=MAC, D_max=D_MAX, tau=TAU, Q=Q)
+    want = _by_demand_subset(prep, "sfca", "s1", modes=MAC, D_max=D_MAX, tau=TAU, Q=Q)
+    pd.testing.assert_frame_equal(got, want, check_dtype=False)
+
+
+def test_supply_id_ifca_matches_the_demand_id_view(prep):
+    got = explain(prep, family="ifca", supply_id="s3", modes=MAC, D_max=D_MAX, tau=TAU)
+    want = _by_demand_subset(prep, "ifca", "s3", modes=MAC, D_max=D_MAX, tau=TAU)
+    pd.testing.assert_frame_equal(got, want, check_dtype=False)
+
+
+def test_supply_id_catchment_matches_the_demand_id_view(prep):
+    got = explain(prep, family="catchment", supply_id="s2", D_max=D_MAX)
+    want = _by_demand_subset(prep, "catchment", "s2", D_max=D_MAX)
+    pd.testing.assert_frame_equal(got, want, check_dtype=False)
+
+
+def test_supply_id_voronoi_matches_the_demand_id_view(prep):
+    got = explain(prep, family="voronoi", supply_id="s1", D_max=D_MAX)
+    want = _by_demand_subset(prep, "voronoi", "s1", D_max=D_MAX)
+    pd.testing.assert_frame_equal(got, want, check_dtype=False)
+
+
+def test_supply_id_rows_are_weight_descending(prep):
+    frame = explain(prep, family="sfca", supply_id="s1", modes=MAC, D_max=D_MAX, tau=TAU, Q=Q)
+    assert np.all(np.diff(frame["weight"].to_numpy()) <= 0.0)
+
+
+def test_supply_id_accepts_a_sequence(prep):
+    frame = explain(
+        prep, family="sfca", supply_id=["s1", "s3"], modes=MAC, D_max=D_MAX, tau=TAU, Q=Q
+    )
+    assert set(frame["supply_id"]) <= {"s1", "s3"}
+    assert set(frame["supply_id"]) == {"s1", "s3"}
+
+
+def test_unreached_supply_id_gives_an_empty_frame(prep):
+    """s4 is beyond D_max for every demand node."""
+    frame = explain(prep, family="sfca", supply_id="s4", modes=MAC, D_max=D_MAX, tau=TAU, Q=Q)
+    assert frame.empty
+    assert list(frame.columns) == ["demand_id", "supply_id", "cost_default", "f_multi", "weight"]
+
+
+def test_open_mask_closing_the_queried_site_gives_an_empty_frame(prep):
+    mask = np.isin(list(S), ["s2", "s3"])  # s1 excluded
+    frame = explain(
+        prep, family="sfca", supply_id="s1", modes=MAC, D_max=D_MAX, tau=TAU, Q=Q, open_mask=mask
+    )
+    assert frame.empty
+
+
+def test_compiled_supports_supply_id(prep):
+    comp = compile_f(prep, modes=MAC, D_max=D_MAX, tau=TAU)
+    got = explain(comp, family="sfca", supply_id="s1", Q=Q)
+    want = explain(prep, family="sfca", supply_id="s1", modes=MAC, D_max=D_MAX, tau=TAU, Q=Q)
+    pd.testing.assert_frame_equal(got, want)
+
+
+def test_compiled_supply_id_matches_under_an_open_mask(prep):
+    mask = np.isin(list(S), ["s1", "s3"])
+    comp = compile_f(prep, modes=MAC, D_max=D_MAX, tau=TAU)
+    got = explain(comp, family="ifca", supply_id="s1", Q=Q, open_mask=mask)
+    want = explain(
+        prep, family="ifca", supply_id="s1", modes=MAC, D_max=D_MAX, tau=TAU, Q=Q, open_mask=mask
+    )
+    pd.testing.assert_frame_equal(got, want)
+
+
+def test_voronoi_rejects_a_compiled_for_supply_id_too(prep):
+    comp = compile_f(prep, modes=MAC, D_max=D_MAX, tau=TAU)
+    with pytest.raises(TypeError, match="voronoi has no impedance"):
+        explain(comp, family="voronoi", supply_id="s1")
+
+
 def test_compiled_open_mask_must_be_a_subset_of_sites(prep, frames):
     supply_df = frames[1]
     comp = compile_f(
