@@ -20,6 +20,7 @@ __all__ = [
     "segment_prefix_rows",
     "segment_rank_desc",
     "segment_starts",
+    "segment_starts_from_lengths",
     "segment_sum",
 ]
 
@@ -40,9 +41,21 @@ def segment_starts(codes: np.ndarray, n_groups: int) -> np.ndarray:
         ``seg[g]:seg[g + 1]`` is the row slice of group ``g``. Empty groups give an
         empty slice rather than being omitted.
     """
-    counts = np.bincount(codes, minlength=n_groups)
-    seg = np.zeros(n_groups + 1, dtype=np.int64)
-    np.cumsum(counts, out=seg[1:])
+    return segment_starts_from_lengths(np.bincount(codes, minlength=n_groups))
+
+
+def segment_starts_from_lengths(lengths: np.ndarray) -> np.ndarray:
+    """Segment offsets given each group's row count — the inverse of segment_lengths.
+
+    Useful where the counts are already known and re-deriving them from the codes would
+    be a second pass over the rows.
+
+    Returns
+    -------
+    ndarray of int64, shape (lengths.size + 1,)
+    """
+    seg = np.zeros(lengths.size + 1, dtype=np.int64)
+    np.cumsum(lengths, out=seg[1:])
     return seg
 
 
@@ -135,8 +148,7 @@ def segment_prefix_rows(seg: np.ndarray, k: np.ndarray) -> np.ndarray:
         Ascending, so a boolean filter of it keeps the segment order intact.
     """
     total = int(k.sum())
-    taken = np.zeros(k.size + 1, dtype=np.int64)
-    np.cumsum(k, out=taken[1:])
+    taken = segment_starts_from_lengths(k)
     # rows[n] = seg[g] + (n - taken[g]) for the g owning output position n, which is one
     # repeat and one arange rather than the two of each the segment_position spelling
     # would cost. The shift is O(n_groups); only these two touch k.sum() elements.
