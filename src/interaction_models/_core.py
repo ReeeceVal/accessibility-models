@@ -17,8 +17,10 @@ __all__ = [
     "segment_lengths",
     "segment_max",
     "segment_position",
+    "segment_prefix_rows",
     "segment_rank_desc",
     "segment_starts",
+    "segment_starts_from_lengths",
     "segment_sum",
 ]
 
@@ -39,9 +41,21 @@ def segment_starts(codes: np.ndarray, n_groups: int) -> np.ndarray:
         ``seg[g]:seg[g + 1]`` is the row slice of group ``g``. Empty groups give an
         empty slice rather than being omitted.
     """
-    counts = np.bincount(codes, minlength=n_groups)
-    seg = np.zeros(n_groups + 1, dtype=np.int64)
-    np.cumsum(counts, out=seg[1:])
+    return segment_starts_from_lengths(np.bincount(codes, minlength=n_groups))
+
+
+def segment_starts_from_lengths(lengths: np.ndarray) -> np.ndarray:
+    """Segment offsets given each group's row count — the inverse of segment_lengths.
+
+    Useful where the counts are already known and re-deriving them from the codes would
+    be a second pass over the rows.
+
+    Returns
+    -------
+    ndarray of int64, shape (lengths.size + 1,)
+    """
+    seg = np.zeros(lengths.size + 1, dtype=np.int64)
+    np.cumsum(lengths, out=seg[1:])
     return seg
 
 
@@ -109,6 +123,38 @@ def segment_position(seg: np.ndarray, n_rows: int) -> np.ndarray:
     (the kappa-only fast path).
     """
     return np.arange(n_rows, dtype=np.int64) - np.repeat(seg[:-1], segment_lengths(seg))
+
+
+def segment_prefix_rows(seg: np.ndarray, k: np.ndarray) -> np.ndarray:
+    """Flat row indices of the first ``k[g]`` rows of each segment.
+
+    The bounded-read counterpart of :func:`segment_position`: that function labels every
+    row with its position, this one materialises the rows at positions ``0:k[g]`` without
+    ever touching the rest. Cost is ``O(n_groups + k.sum())`` rather than ``O(n_rows)``,
+    which is the whole reason it exists.
+
+    Parameters
+    ----------
+    seg : ndarray of int64, shape (n_groups + 1,)
+    k : ndarray of int64, shape (n_groups,)
+        Rows to take from the front of each segment. Must satisfy
+        ``0 <= k <= segment_lengths(seg)``; a larger value would spill into the next
+        segment. Unchecked, as :func:`segment_starts` leaves its own range precondition
+        unchecked.
+
+    Returns
+    -------
+    ndarray of int64, shape (k.sum(),)
+        Ascending, so a boolean filter of it keeps the segment order intact.
+    """
+    total = int(k.sum())
+    taken = segment_starts_from_lengths(k)
+    # rows[n] = seg[g] + (n - taken[g]) for the g owning output position n, which is one
+    # repeat and one arange rather than the two of each the segment_position spelling
+    # would cost. The shift is O(n_groups); only these two touch k.sum() elements.
+    rows = np.arange(total, dtype=np.int64)
+    rows += np.repeat(seg[:-1] - taken[:-1], k)
+    return rows
 
 
 def segment_first_rows(seg: np.ndarray) -> tuple[np.ndarray, np.ndarray]:

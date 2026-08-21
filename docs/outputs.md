@@ -5,7 +5,8 @@ Every model function returns a `Result`.
 ```python
 res = im.sfca(prep, modes=modes, D_max=45, Q=5, tau=0.01)
 
-res.params      # {"D_max": 45, "Q": 5, "tau": 0.01, "n_modes": 2}
+res.params      # {"D_max": 45, "Q": 5, "tau": 0.01, "n_modes": 2,
+                #  "n_open": None, "n_width_fallback": None}
 res.supply      # DataFrame, one row per supply point
 res.demand      # DataFrame, one row per demand node
 res.stats       # None unless stats=[...] was requested
@@ -67,7 +68,7 @@ Columns on `cost_df` are not passed through — there is no per-pair output fram
 ## `params`
 
 `params` is the full description of a call — it says which optional terms were active, so
-nothing about the configuration has to be remembered separately. Always the same five
+nothing about the configuration has to be remembered separately. Always the same six
 keys, so sweep rows line up regardless of family; a key the family does not use is `None`:
 
 | Key | `catchment` | `voronoi` | `ifca` | `sfca` | `sfca_e` |
@@ -77,7 +78,33 @@ keys, so sweep rows line up regardless of family; a key the family does not use 
 | `tau` | ✓, `None` without impedance | `None` | ✓ | ✓ | ✓ |
 | `n_modes` | ✓ | ✓ | ✓ | ✓ | ✓ |
 | `n_open` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| `n_width_fallback` | `None` | `None` | ✓ or `None` | ✓ or `None` | ✓ or `None` |
 
 `n_open` is the number of open sites, or `None` when no `open_mask` was passed. It is in
 `params` for the same reason the rest are: without it, two results computed over different
 site sets would be indistinguishable in a sweep table.
+
+`n_width_fallback` is the number of demand nodes whose bounded prefix had to be widened,
+or `None` unless a `Compiled` built with `width=` was used. It never moves the numbers —
+the fallback is what keeps them exact — only how long the call took. See
+[`pipeline.md`](pipeline.md).
+
+## Bare exposure
+
+`bare=True` returns `E_j` on its own — a float64 array of one value per row of
+`supply_df`, in that order — instead of a `Result`:
+
+```python
+E_j = im.sfca_e(comp, Q=5, open_mask=mask, bare=True)   # ndarray, shape (n_supply,)
+```
+
+It skips `R_j`, `L_j`, the `n_demand_j` bincount, both frames, `params` and the `Result`
+itself. That is worth a few percent per call — real for a loop running tens of thousands
+of times, nothing at all for a single call. Available on every family, since every family
+produces an `E_j`.
+
+`stats=` and `output=` are refused rather than ignored: both ask for something a bare
+return cannot carry. One asymmetry is worth knowing — `catchment`, `voronoi`, `sfca` and
+`sfca_e` compute `E_j` without capacity, so `bare=True` works on a `supply_df` that has no
+`capacity` column, where asking for `A_i` would raise. `ifca` still requires it, because
+`S_j` sits inside its `E_j`.

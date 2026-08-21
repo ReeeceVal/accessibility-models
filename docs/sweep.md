@@ -89,7 +89,8 @@ One row per combination:
 
 1. `model` — which model function produced the row;
 2. one column per grid key, holding its label;
-3. the resolved `D_max`, `Q`, `tau`, `n_modes`, skipping any already present as a grid
+3. the resolved `D_max`, `Q`, `tau`, `n_modes`, `n_open`, `n_width_fallback`, skipping
+   any already present as a grid
    column;
 4. every key of every requested stat group.
 

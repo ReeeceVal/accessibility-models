@@ -76,7 +76,7 @@ print(res.stats["demand_capture_rate"])
 ```
 
 ```
-{'D_max': 45, 'Q': 2, 'tau': 0.01, 'n_modes': 2}
+{'D_max': 45, 'Q': 2, 'tau': 0.01, 'n_modes': 2, 'n_open': None, 'n_width_fallback': None}
 supply_id  capacity         E_j      R_j  n_demand_j
   0010001       2.0 2657.559490 0.000753           3
   0010002       1.0  264.803074 0.003776           3

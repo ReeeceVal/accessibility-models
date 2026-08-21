@@ -78,7 +78,7 @@ print(res.stats["demand_capture_rate"])
 ```
 
 ```
-{'D_max': 45, 'Q': 2, 'tau': 0.01, 'n_modes': 2, 'n_open': None}
+{'D_max': 45, 'Q': 2, 'tau': 0.01, 'n_modes': 2, 'n_open': None, 'n_width_fallback': None}
 supply_id  capacity         E_j      R_j  n_demand_j
   0010001       2.0 2657.559490 0.000753           3
   0010002       1.0  264.803074 0.003776           3
@@ -104,10 +104,14 @@ mask = supply_df["supply_id"].isin(["0010001", "0010003"]).to_numpy()   # leadin
 `prepare()` → `compile_f(modes, D_max, tau)` → **mask** → `sfca_e(comp, Q, open_mask)`
 
 ```python
-comp = im.compile_f(prep, modes=modes, D_max=45, tau=0.01)
+comp = im.compile_f(prep, modes=modes, D_max=45, tau=0.01, width=20)
 for mask in candidate_networks:
-    E_j = im.sfca_e(comp, Q=2, open_mask=mask).supply["E_j"]
+    E_j = im.sfca_e(comp, Q=2, open_mask=mask, bare=True)      # ndarray, no frames
 ```
+
+`width` bounds the candidate list each call reads and `bare` returns `E_j` alone. Both are
+optional, both leave the numbers bit-for-bit unchanged, and `width` pays only where the
+open set is dense — see [`docs/pipeline.md`](docs/pipeline.md).
 
 **b) Network constant, parameters change** — calibration.
 `prepare()` → **mask** → `compile_f(modes, D_max, tau, sites)` → `sfca_e(comp, Q)`

@@ -55,7 +55,7 @@ The three stages form a pipeline you can enter at any point:
 | Stage | Fixes | Reuse it when |
 |---|---|---|
 | `prepare()` | the input frames | always — nothing about it depends on parameters |
-| `compile_f()` | `modes`, `D_max`, `tau`, and optionally `sites` | the **network** varies |
+| `compile_f()` | `modes`, `D_max`, `tau`, and optionally `sites` and `width` | the **network** varies |
 | the model | `Q`, `open_mask` | — |
 
 When the *parameters* vary and the network is fixed, invert it: pass the fixed network to
@@ -69,6 +69,71 @@ it takes `open_mask` alone.
 
 `modes`, `D_max` and `tau` are baked in, so passing them alongside a `Compiled` raises
 rather than being silently ignored.
+
+### Bounding the candidate list: `width=`
+
+A model call reads every compiled row to find each node's top `Q` open options. `width`
+bounds that read instead:
+
+```python
+comp = im.compile_f(prep, modes=modes, D_max=45, tau=0.01, width=20)
+E_j = im.sfca_e(comp, Q=5, open_mask=mask, bare=True)
+```
+
+**No rows are dropped.** The `Compiled` still holds every pair surviving `sites`, `D_max`
+and `tau`, and its memory is unchanged. What `width` adds is `k_i = min(len_i, width)`,
+the prefix a call reads first, and `truncated_i`, whether that prefix hides anything.
+
+Reading only a prefix is exact because the rows in a segment are already in a fixed total
+order — `f_multi` descending, ties by the incoming `(cost_default, supply_code)` — and
+`open_mask` is a per-row predicate. So "the first `Q` open rows of the segment" is a well
+defined set however you go looking for it, and exactly three things can happen:
+
+| the prefix holds | what follows |
+|---|---|
+| `≥ Q` open rows | the `Q`-th open row is inside it — the same rows a full read selects |
+| `< Q` open, nothing hidden (`k_i == len_i`) | the prefix **is** the segment |
+| `< Q` open, rows hidden | a **violator**: its hidden tail is re-read and spliced in |
+
+One retry is always enough, because a node read in full is no longer truncated. A tail row
+sorts after its own segment's prefix and before the next segment, so the spliced result is
+the same rows in the same order a full read would have produced, and `add.reduceat`,
+`maximum.reduceat` and `bincount` accumulate identically. The equivalence is bit-for-bit,
+not within a tolerance, and `tests/test_width.py` asserts it with `assert_array_equal`
+over every non-empty subset of the site set, both sides of `Q`, and all three mode paths.
+
+`width` requires a finite `Q` at call time — an unbounded choice set cannot be truncated —
+so `catchment()`, and `ifca()` without `Q`, raise rather than quietly ignoring it.
+
+#### When it pays
+
+The read shrinks from `O(n_pairs)` to `O(n_demand + Σ k_i)`, but a node needs `Q` of its
+top `width` to be open, so the useful window is
+
+```
+Q / density  <<  width  <<  candidates per node
+```
+
+Below that window most truncated nodes are violators and the bounded pass becomes work
+done on top of the full one; above it there is nothing left to truncate. Measured on a
+synthetic 4M-pair matrix (20k demand nodes, ~74 candidates each after `D_max` and `tau`,
+1000 sites, `Q = 5`, `width = 20`), per call against the same compile without a width:
+
+| open density | fallbacks | per call |
+|---|---|---|
+| 0.20 | 12,605 | 1.91× — **slower** |
+| 0.35 | 2,218 | 1.21× |
+| 0.50 | 85 | 0.90× |
+| 0.80 | 0 | 0.71× |
+| 1.00 | 0 | 0.62× |
+
+`params["n_width_fallback"]` is the instrument: it counts the nodes re-read on that call.
+Persistently far from zero means `width` is too small for the density being explored —
+raise it, or drop the width. This makes `width` a tool for **dense** open sets, such as
+local search around an incumbent network, and the wrong tool for greedy construction
+outward from an empty one, whose early iterations have almost nothing open.
+
+`benchmarks/optimisation_loop.py` is the script those numbers come from.
 
 ### Why this also fixes the slow path
 
@@ -118,9 +183,9 @@ one contiguous, cost-ascending segment. When **every mode travels on `cost_defau
 each `decay` is non-increasing, `f_multi` is a monotone function of `cost_default`, which
 means that segment order *already is* the `f_multi`-descending rank order.
 
-Stages 1, 5 and 6 then reduce to **prefix truncations** of a segment. Top-`Q` costs one
-`arange` subtraction rather than a sort, and it costs the same whatever `Q` you pass. This
-is the dominant case.
+Stages 1, 5 and 6 then reduce to **prefix truncations** of a segment. Stage 6 materialises
+each segment's first `Q` rows directly rather than sorting, so it costs `O(Q · n_demand)` —
+what it keeps, not what it reads. This is the dominant case.
 
 When a mode carries **its own cost column** (walking, say), `f_multi` is no longer monotone
 in `cost_default` and top-`Q` needs one `lexsort` over the surviving pairs per call.

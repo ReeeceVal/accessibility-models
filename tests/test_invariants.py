@@ -90,7 +90,8 @@ def test_params_describe_every_configuration(prep):
         sfca_e(prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=2).params,
         sfca_e(prep, modes=MAC, D_max=D_MAX, tau=TAU, Q=2).params,
     ]
-    assert all(set(p) == {"D_max", "Q", "tau", "n_modes", "n_open"} for p in resolved)
+    keys = {"D_max", "Q", "tau", "n_modes", "n_open", "n_width_fallback"}
+    assert all(set(p) == keys for p in resolved)
     assert [(p["n_modes"], p["Q"], p["tau"]) for p in resolved] == [
         (0, None, None), (1, None, TAU), (2, None, TAU),
         (0, None, None), (2, None, None),
