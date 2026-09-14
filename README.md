@@ -299,8 +299,6 @@ The families build on the floating catchment area literature:
   Information Science*, 26(6), 1073–1089.
 * Wang, F. (2018). Inverted two-step floating catchment area method for measuring facility
   crowdedness. *The Professional Geographer*, 70(2), 251–260.
-* Nemhauser, G. L., Wolsey, L. A. & Fisher, M. L. (1978). An analysis of approximations for
-  maximizing submodular set functions. *Mathematical Programming*, 14, 265–294.
 
 ## AI assistance
 
