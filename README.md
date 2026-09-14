@@ -45,7 +45,7 @@ enough to sit inside a site-selection optimisation loop.
 | **Voronoi** | winner-take-all assignment to the nearest reachable site | `Σ_{i: j=j*(i)} P_i Σ_m π_m 1[κ_m d_ij ≤ D_max]` | `S_{j*} / E_{j*}` |
 | **iFCA** | sites compete for demand, weighted by crowdedness | `S_j Σ_i r_i f_ij`, `r_i = P_i / Σ_j S_j f_ij` | `1 / r_i` |
 | **3SFCA** | demand-side selection across a bounded choice set | `Σ_i P_i G_ij f_ij`, `G_ij = f_ij / Σ_k f_ik` | `Σ_j R_j G_ij f_ij` |
-| **MAC-3SFCA-E** | 3SFCA with an explicit participation step | `Σ_i P_i Φ_i G_ij`, `Φ_i = max_j f_ij` | `Σ_j R_j G_ij f_ij` |
+| **MAC-3SFCA-E** | mode-availability constrained 3SFCA with elastic participation | `Σ_i P_i Φ_i G_ij`, `Φ_i = max_j f_ij` | `Σ_j R_j G_ij f_ij` |
 
 `P_i` is demand, `S_j` is capacity, and `f_ij` is the combined impedance across travel
 modes:
@@ -57,12 +57,15 @@ f_ij = Σ_m π_m(i) · f_m(κ_m · cost_m(i,j))       (renormalised over availab
 With no `decay` on any mode, `f_ij = 1` and Catchment reduces to plain counts of demand and
 capacity within reach.
 
-MAC-3SFCA-E separates *whether* a node travels (`Φ_i`) from *which* site it picks
-(`G_ij`), two things 3SFCA conflates. Because `Σ_j G_ij = 1`, its total collapses to
-`Σ_i P_i max_j f_ij`, the classical facility-location function. That makes it usable as an
-optimisation objective where the other families' totals are not. It also emits
-`L_j = E_j / S_j`, the load per unit of capacity. See
-[`docs/families/sfca-e.md`](docs/families/sfca-e.md).
+MAC-3SFCA-E, the elastic-participation variant of MAC-3SFCA, separates *whether* a node
+travels (`Φ_i`) from *which* site it picks (`G_ij`), two things 3SFCA conflates. Because
+`Σ_j G_ij = 1`, its total collapses to `Σ_i P_i max_j f_ij`, the classical
+facility-location function. That makes it usable as an optimisation objective where the
+other families' totals are not. It also emits `L_j = E_j / S_j`, the load per unit of
+capacity. See [`docs/families/sfca-e.md`](docs/families/sfca-e.md).
+
+The mode-availability constrained method, MAC-3SFCA, is introduced in Valentine & Grobler
+(2026, in press). See [Citation](#citation).
 
 ## Installation
 
@@ -208,7 +211,7 @@ The full reference lives in [`docs/`](docs/index.md) as plain markdown:
 | [families/voronoi.md](docs/families/voronoi.md) | nearest-site assignment |
 | [families/ifca.md](docs/families/ifca.md) | inverted floating catchment area |
 | [families/sfca.md](docs/families/sfca.md) | three-step floating catchment area |
-| [families/sfca-e.md](docs/families/sfca-e.md) | 3SFCA with explicit participation, for optimisation |
+| [families/sfca-e.md](docs/families/sfca-e.md) | MAC-3SFCA with elastic participation, for optimisation |
 | [outputs.md](docs/outputs.md) | the `Result` object and the full column dictionary |
 | [explain.md](docs/explain.md) | per-pair terms for one demand node or supply point, without materialising the pair table |
 | [stats.md](docs/stats.md) | the five optional statistics groups |
@@ -244,6 +247,46 @@ src/interaction_models/
     stats.py       optional statistics groups
     sweep.py       sweep()
 ```
+
+## Citation
+
+MAC-3SFCA, the mode-availability constrained method this package builds on, is introduced
+in the paper below, which has been **accepted for publication and is in press**. If you use
+this package in academic work, please cite it. GitHub's *Cite this repository* button
+generates the same reference from [`CITATION.cff`](CITATION.cff).
+
+> Valentine, R.C., Grobler, J.: A mode-availability constrained variant and
+> uncertainty-aware evaluation procedure for floating catchment area methods. In:
+> *Decision Sciences: Fourth Decision Science Alliance International Summer Conference,
+> DSA ISC 2026, Madrid, Spain, June 18–19, 2026, Proceedings*. Lecture Notes in Computer
+> Science. Springer, Cham (2026, in press)
+
+Reece C. Valentine ([ORCID](https://orcid.org/0009-0008-4826-639X)) and Jacomine Grobler
+([ORCID](https://orcid.org/0000-0002-1868-0759)), Department of Industrial Engineering,
+Stellenbosch University.
+
+<details>
+<summary>BibTeX</summary>
+
+```bibtex
+@inproceedings{valentine2026mac3sfca,
+  author    = {Valentine, Reece C. and Grobler, Jacomine},
+  title     = {A Mode-Availability Constrained Variant and Uncertainty-Aware
+               Evaluation Procedure for Floating Catchment Area Methods},
+  booktitle = {Decision Sciences: Fourth Decision Science Alliance International
+               Summer Conference, DSA ISC 2026, Madrid, Spain, June 18--19, 2026,
+               Proceedings},
+  series    = {Lecture Notes in Computer Science},
+  publisher = {Springer},
+  address   = {Cham},
+  year      = {2026},
+  note      = {Accepted for publication, in press}
+}
+```
+
+</details>
+
+The volume, pages and DOI will be added once the proceedings are published.
 
 ## Background
 

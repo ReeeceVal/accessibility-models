@@ -13,6 +13,8 @@ All notable changes to this project are documented here. The format is based on
 - `ruff format` and a broader lint rule set (import sorting, bugbear, pyupgrade), both
   enforced in CI.
 - This changelog.
+- `CITATION.cff` and a README citation section for the MAC-3SFCA paper (DSA ISC 2026,
+  in press).
 
 ### Changed
 
@@ -43,7 +45,7 @@ First tagged release.
 - `prepare()` and `validate_inputs()`: validate, factorise and sort the three input frames
   once for reuse across many model calls.
 - Five model families: `catchment()`, `voronoi()`, `ifca()`, `sfca()` (3SFCA) and
-  `sfca_e()` (MAC-3SFCA-E, with explicit participation and `L_j`).
+  `sfca_e()` (MAC-3SFCA-E, the elastic-participation variant of MAC-3SFCA, with `L_j`).
 - Multi-mode impedance through `Mode` and `gaussian()`, renormalised over the modes
   available on each pair.
 - `open_mask` on every family, for evaluating candidate site sets without re-preparing.

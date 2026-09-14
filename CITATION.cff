@@ -1,0 +1,56 @@
+cff-version: 1.2.0
+message: >-
+  If you use this software, please cite the paper that introduces the MAC-3SFCA
+  method, listed under preferred-citation.
+type: software
+title: accessibility-models
+abstract: >-
+  Spatial interaction and accessibility models (floating catchment area family)
+  over a demand-to-supply cost matrix, in numpy and pandas.
+authors:
+  - family-names: Valentine
+    given-names: Reece C.
+    orcid: "https://orcid.org/0009-0008-4826-639X"
+repository-code: "https://github.com/ReeeceVal/accessibility-models"
+license: MIT
+version: 0.3.0
+date-released: "2026-08-21"
+keywords:
+  - accessibility
+  - spatial interaction
+  - floating catchment area
+  - facility location
+preferred-citation:
+  type: conference-paper
+  title: >-
+    A Mode-Availability Constrained Variant and Uncertainty-Aware Evaluation
+    Procedure for Floating Catchment Area Methods
+  authors:
+    - family-names: Valentine
+      given-names: Reece C.
+      orcid: "https://orcid.org/0009-0008-4826-639X"
+      affiliation: >-
+        Department of Industrial Engineering, Stellenbosch University
+    - family-names: Grobler
+      given-names: Jacomine
+      orcid: "https://orcid.org/0000-0002-1868-0759"
+      affiliation: >-
+        Department of Industrial Engineering, Stellenbosch University
+  collection-title: >-
+    Decision Sciences: Fourth Decision Science Alliance International Summer
+    Conference, DSA ISC 2026, Madrid, Spain, June 18–19, 2026, Proceedings
+  collection-type: proceedings
+  conference:
+    name: >-
+      Fourth Decision Science Alliance International Summer Conference
+      (DSA ISC 2026)
+    city: Madrid
+    country: ES
+    date-start: "2026-06-18"
+    date-end: "2026-06-19"
+  publisher:
+    name: Springer
+    city: Cham
+  year: 2026
+  status: in-press
+  notes: Lecture Notes in Computer Science. Accepted for publication, in press.

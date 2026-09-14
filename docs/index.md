@@ -12,7 +12,7 @@ parameters that define them:
 | **Voronoi** | winner-take-all assignment to the nearest site | [voronoi](families/voronoi.md) |
 | **iFCA** | sites compete for demand, weighted by crowdedness | [ifca](families/ifca.md) |
 | **3SFCA** | demand-side selection across a bounded choice set | [sfca](families/sfca.md) |
-| **MAC-3SFCA-E** | 3SFCA with an explicit participation step; monotone under site openings | [sfca-e](families/sfca-e.md) |
+| **MAC-3SFCA-E** | mode-availability constrained 3SFCA with elastic participation; monotone under site openings | [sfca-e](families/sfca-e.md) |
 
 Every family emits the same two outputs: `E_j`, the expected exposure of a supply point,
 and `A_i`, the accessibility of a demand node.
