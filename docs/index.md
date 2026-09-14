@@ -31,8 +31,8 @@ comes back as `res.params`.
 
 ## Install
 
-```powershell
-uv sync
+```bash
+pip install "interaction-models @ git+https://github.com/ReeeceVal/accessibility-models.git"
 ```
 
 ## Quickstart
@@ -44,8 +44,8 @@ import interaction_models as im
 demand_df = pd.DataFrame({
     "demand_id":  ["d1", "d2", "d3", "d4"],
     "demand":     [1200.0, 800.0, 450.0, 2100.0],
-    "pv_share":   [0.35, 0.10, 0.60, 0.25],
-    "mbt_share":  [0.65, 0.90, 0.40, 0.75],
+    "pv_share":   [0.35, 0.10, 0.60, 0.25],        # primary transport mode share
+    "mbt_share":  [0.65, 0.90, 0.40, 0.75],        # secondary transport mode share
     "province":   ["WC", "WC", "GP", "GP"],        # passthrough
 })
 
@@ -70,8 +70,8 @@ prep = im.prepare(demand_df, supply_df, cost_df, modes=modes)
 res = im.sfca(prep, modes=modes, D_max=45, Q=2, tau=0.01, stats=["coverage"])
 
 print(res.params)
-print(res.supply)
-print(res.demand)
+print(res.supply.to_string(index=False))
+print(res.demand.to_string(index=False))
 print(res.stats["demand_capture_rate"])
 ```
 

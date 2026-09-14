@@ -48,3 +48,4 @@ jobs:
       - run: uv lock --check
       - run: uv sync --frozen
       - run: uv run --frozen ruff check
+      - run: uv run --frozen ruff format --check
