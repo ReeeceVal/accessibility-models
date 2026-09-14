@@ -18,14 +18,23 @@ def test_single_import_surface():
 
 def test_every_family_is_reachable_by_name():
     assert set(im.sweep.__globals__["MODELS"]) == {
-        "catchment", "voronoi", "ifca", "sfca", "sfca_e",
+        "catchment",
+        "voronoi",
+        "ifca",
+        "sfca",
+        "sfca_e",
     }
 
 
 def test_sfca_e_sweeps_like_any_other_family(prep):
     rows = im.sweep(
-        prep, "sfca_e", modes=MAC, D_max=D_MAX, tau=TAU,
-        grid={"Q": [1, 2, 3]}, stats=["coverage"],
+        prep,
+        "sfca_e",
+        modes=MAC,
+        D_max=D_MAX,
+        tau=TAU,
+        grid={"Q": [1, 2, 3]},
+        stats=["coverage"],
     )
     assert list(rows["model"]) == ["sfca_e"] * 3
     # Phi_i is invariant to Q, so the total is too — the family's headline property.
@@ -100,12 +109,22 @@ def test_decay_rewrites_every_mode(prep):
 
 def test_kappa_rewrites_only_the_non_reference_modes(prep):
     rows = im.sweep(
-        prep, "catchment", modes=MAC, D_max=D_MAX, tau=TAU,
-        grid={"kappa": [1.0]}, stats=["coverage"],
+        prep,
+        "catchment",
+        modes=MAC,
+        D_max=D_MAX,
+        tau=TAU,
+        grid={"kappa": [1.0]},
+        stats=["coverage"],
     )
     unimodal = im.sweep(
-        prep, "catchment", modes=SINGLE, D_max=D_MAX, tau=TAU,
-        grid={"decay": [im.gaussian(BETA)]}, stats=["coverage"],
+        prep,
+        "catchment",
+        modes=SINGLE,
+        D_max=D_MAX,
+        tau=TAU,
+        grid={"decay": [im.gaussian(BETA)]},
+        stats=["coverage"],
     )
     # kappa = 1 on the second mode collapses the two-mode form onto the one-mode one.
     assert rows.loc[0, "sum_E_j"] == pytest.approx(unimodal.loc[0, "sum_E_j"])

@@ -19,10 +19,7 @@ def sfca_reference(survivors, impedance):
     G = {i: {j: fij / total[i] for j, fij in row.items()} for i, row in f.items() if total[i] > 0}
     E = {j: sum(P[i] * G[i].get(j, 0.0) * f[i].get(j, 0.0) for i in G) for j in S}
     R = {j: (S[j] / E[j] if E[j] > 0 else 0.0) for j in S}
-    A = {
-        i: (sum(R[j] * G[i][j] * f[i][j] for j in G[i]) if i in G else 0.0)
-        for i in survivors
-    }
+    A = {i: (sum(R[j] * G[i][j] * f[i][j] for j in G[i]) if i in G else 0.0) for i in survivors}
     return E, A
 
 

@@ -36,9 +36,7 @@ MAC = [
 
 SITES = list(S)
 SUBSETS = [
-    subset
-    for size in range(1, len(SITES) + 1)
-    for subset in itertools.combinations(SITES, size)
+    subset for size in range(1, len(SITES) + 1) for subset in itertools.combinations(SITES, size)
 ]
 
 #: (label, model, kwargs) — every family, since every family produces an E_j.
@@ -58,9 +56,7 @@ def mask_for(supply_df, keep) -> np.ndarray:
 @pytest.mark.parametrize(
     ("label", "model", "kwargs"), BARE_CASES, ids=[case[0] for case in BARE_CASES]
 )
-def test_bare_returns_the_exposure_column_of_the_full_result(
-    prep, supply_df, label, model, kwargs
-):
+def test_bare_returns_the_exposure_column_of_the_full_result(prep, supply_df, label, model, kwargs):
     for keep in [None, *SUBSETS]:
         mask = None if keep is None else mask_for(supply_df, keep)
         np.testing.assert_array_equal(
@@ -116,8 +112,7 @@ def test_bare_rejects_stats_and_output(prep, label, model, kwargs, conflict):
 
 def test_an_explicit_default_output_is_not_a_conflict(prep):
     np.testing.assert_array_equal(
-        sfca_e(prep, modes=MAC, D_max=D_MAX, tau=TAU, Q=2, bare=True,
-               output=("demand", "supply")),
+        sfca_e(prep, modes=MAC, D_max=D_MAX, tau=TAU, Q=2, bare=True, output=("demand", "supply")),
         sfca_e(prep, modes=MAC, D_max=D_MAX, tau=TAU, Q=2, bare=True),
     )
 

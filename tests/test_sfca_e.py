@@ -26,10 +26,7 @@ def sfca_e_reference(survivors, impedance):
     G = {i: {j: fij / total[i] for j, fij in row.items()} for i, row in f.items() if total[i] > 0}
     E = {j: sum(P[i] * phi[i] * G[i].get(j, 0.0) for i in G) for j in S}
     R = {j: (S[j] / E[j] if E[j] > 0 else 0.0) for j in S}
-    A = {
-        i: (sum(R[j] * G[i][j] * f[i][j] for j in G[i]) if i in G else 0.0)
-        for i in survivors
-    }
+    A = {i: (sum(R[j] * G[i][j] * f[i][j] for j in G[i]) if i in G else 0.0) for i in survivors}
     return E, A, phi
 
 
@@ -134,8 +131,9 @@ def test_opening_a_site_never_lowers_total_exposure(frames, label, kwargs):
     """Monotonicity — the property the family exists for — over every site subset."""
     worst, where = 0.0, None
     for subset, added in SUBSETS:
-        delta = (total_exposure(sfca_e, frames, (*subset, added), **kwargs)
-                 - total_exposure(sfca_e, frames, subset, **kwargs))
+        delta = total_exposure(sfca_e, frames, (*subset, added), **kwargs) - total_exposure(
+            sfca_e, frames, subset, **kwargs
+        )
         if delta < worst:
             worst, where = delta, (subset, added)
     assert worst >= -1e-12, f"opening {where[1]} onto {where[0]} lost {worst:.6f}"
@@ -157,26 +155,32 @@ def test_3sfca_is_not_monotone_on_the_same_network(frames):
     ]
     assert min(losses) < -1e-9
     # and the same opening, under the same parameters, does not lose under sfca_e
-    assert min(
-        total_exposure(sfca_e, frames, (*subset, added), **kwargs)
-        - total_exposure(sfca_e, frames, subset, **kwargs)
-        for subset, added in SUBSETS
-    ) >= -1e-12
+    assert (
+        min(
+            total_exposure(sfca_e, frames, (*subset, added), **kwargs)
+            - total_exposure(sfca_e, frames, subset, **kwargs)
+            for subset, added in SUBSETS
+        )
+        >= -1e-12
+    )
 
 
 @pytest.mark.parametrize(("label", "kwargs"), CONFIGS, ids=[c[0] for c in CONFIGS])
 def test_total_is_bounded_below_by_3sfca(frames, label, kwargs):
     """Phi_i is a maximum where 3SFCA uses a contraharmonic mean of the same values."""
     for subset in NON_EMPTY:
-        assert (total_exposure(sfca_e, frames, subset, **kwargs)
-                >= total_exposure(sfca, frames, subset, **kwargs) - 1e-12), subset
+        assert (
+            total_exposure(sfca_e, frames, subset, **kwargs)
+            >= total_exposure(sfca, frames, subset, **kwargs) - 1e-12
+        ), subset
 
 
 def test_equal_impedances_collapse_onto_3sfca(frames):
     """d5 sits 22 minutes from both s1 and s2: equal f, so max == contraharmonic mean."""
     demand_df, supply_df, cost_df = subset_frames(frames, ("s1", "s2"))
-    prep = prepare(demand_df[demand_df["demand_id"] == "d5"], supply_df,
-                   cost_df[cost_df["demand_id"] == "d5"])
+    prep = prepare(
+        demand_df[demand_df["demand_id"] == "d5"], supply_df, cost_df[cost_df["demand_id"] == "d5"]
+    )
     kwargs = {"modes": SINGLE, "D_max": D_MAX, "tau": TAU, "Q": 2}
     np.testing.assert_allclose(
         sfca_e(prep, **kwargs).supply["E_j"], sfca(prep, **kwargs).supply["E_j"]
@@ -203,16 +207,20 @@ def test_operational_load_is_exposure_over_capacity(prep):
     res = sfca_e(prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q)
     np.testing.assert_allclose(res.supply["L_j"], res.supply["E_j"] / res.supply["capacity"])
     reached = res.supply["E_j"] > 0
-    np.testing.assert_allclose(
-        res.supply.loc[reached, "L_j"], 1.0 / res.supply.loc[reached, "R_j"]
-    )
+    np.testing.assert_allclose(res.supply.loc[reached, "L_j"], 1.0 / res.supply.loc[reached, "R_j"])
 
 
 def test_capacity_is_optional_for_exposure(frames):
     demand_df, supply_df, cost_df = frames
     res = sfca_e(
-        demand_df, supply_df.drop(columns="capacity"), cost_df,
-        modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q, output=("supply",),
+        demand_df,
+        supply_df.drop(columns="capacity"),
+        cost_df,
+        modes=SINGLE,
+        D_max=D_MAX,
+        tau=TAU,
+        Q=Q,
+        output=("supply",),
     )
     assert res.supply["E_j"].sum() > 0
     assert res.supply["R_j"].isna().all()
@@ -223,8 +231,13 @@ def test_capacity_is_required_for_accessibility(frames):
     demand_df, supply_df, cost_df = frames
     with pytest.raises(ValueError, match="to compute A_i"):
         sfca_e(
-            demand_df, supply_df.drop(columns="capacity"), cost_df,
-            modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q,
+            demand_df,
+            supply_df.drop(columns="capacity"),
+            cost_df,
+            modes=SINGLE,
+            D_max=D_MAX,
+            tau=TAU,
+            Q=Q,
         )
 
 

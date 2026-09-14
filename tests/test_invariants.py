@@ -93,11 +93,19 @@ def test_params_describe_every_configuration(prep):
     keys = {"D_max", "Q", "tau", "n_modes", "n_open", "n_width_fallback"}
     assert all(set(p) == keys for p in resolved)
     assert [(p["n_modes"], p["Q"], p["tau"]) for p in resolved] == [
-        (0, None, None), (1, None, TAU), (2, None, TAU),
-        (0, None, None), (2, None, None),
-        (1, None, TAU), (1, 2, TAU), (2, None, TAU), (2, 2, TAU),
-        (1, 2, TAU), (2, 2, TAU),
-        (1, 2, TAU), (2, 2, TAU),
+        (0, None, None),
+        (1, None, TAU),
+        (2, None, TAU),
+        (0, None, None),
+        (2, None, None),
+        (1, None, TAU),
+        (1, 2, TAU),
+        (2, None, TAU),
+        (2, 2, TAU),
+        (1, 2, TAU),
+        (2, 2, TAU),
+        (1, 2, TAU),
+        (2, 2, TAU),
     ]
 
 

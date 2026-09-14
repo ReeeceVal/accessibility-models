@@ -177,9 +177,9 @@ def _inequality(
 def _choice_set(G: np.ndarray, seg: np.ndarray, Q: int | None) -> dict:
     sizes = _core.segment_lengths(seg).astype(np.float64)
     herfindahl = _core.segment_sum(G * G, seg)
-    N_eff = np.divide(
-        1.0, herfindahl, out=np.full(sizes.size, np.nan), where=herfindahl > 0
-    )[sizes > 0]
+    N_eff = np.divide(1.0, herfindahl, out=np.full(sizes.size, np.nan), where=herfindahl > 0)[
+        sizes > 0
+    ]
     return {
         "mean_N_eff_i": float(np.mean(N_eff)) if N_eff.size else float("nan"),
         "median_N_eff_i": float(np.median(N_eff)) if N_eff.size else float("nan"),

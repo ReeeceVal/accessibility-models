@@ -105,9 +105,19 @@ def test_exposure(prep):
     assert s["gini_L_j"] == pytest.approx(gini(E_j / np.array(list(S.values()))))
     assert s["p90_E_j"] == pytest.approx(np.percentile(E_j, 90))
     assert set(s) == {
-        "sum_E_j", "total_demand", "demand_capture_rate", "n_supply_zero_exposure",
-        "gini_E_j", "gini_L_j", "mean_E_j", "median_E_j", "p10_E_j", "p90_E_j",
-        "std_E_j", "min_E_j", "max_E_j",
+        "sum_E_j",
+        "total_demand",
+        "demand_capture_rate",
+        "n_supply_zero_exposure",
+        "gini_E_j",
+        "gini_L_j",
+        "mean_E_j",
+        "median_E_j",
+        "p10_E_j",
+        "p90_E_j",
+        "std_E_j",
+        "min_E_j",
+        "max_E_j",
     }
 
 
@@ -122,8 +132,17 @@ def test_gini_L_j_is_the_gini_of_the_load_the_supply_frame_reports(prep):
 def test_gini_L_j_is_nan_without_a_capacity_column(frames):
     """``exposure`` must stay usable without capacity, so this degrades rather than raises."""
     demand_df, supply_df, cost_df = frames
-    res = sfca(demand_df, supply_df.drop(columns="capacity"), cost_df, modes=SINGLE,
-               D_max=D_MAX, tau=TAU, Q=Q, stats=["exposure"], output=())
+    res = sfca(
+        demand_df,
+        supply_df.drop(columns="capacity"),
+        cost_df,
+        modes=SINGLE,
+        D_max=D_MAX,
+        tau=TAU,
+        Q=Q,
+        stats=["exposure"],
+        output=(),
+    )
     assert res.stats["sum_E_j"] > 0.0
     assert np.isnan(res.stats["gini_L_j"])
 
@@ -133,8 +152,9 @@ def test_gini_L_j_ignores_sites_with_no_capacity(frames):
     demand_df, supply_df, cost_df = frames
     zeroed = supply_df.copy()
     zeroed.loc[zeroed["supply_id"] == "s2", "capacity"] = 0.0
-    res = sfca_e(demand_df, zeroed, cost_df, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q,
-                 stats=["exposure"])
+    res = sfca_e(
+        demand_df, zeroed, cost_df, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q, stats=["exposure"]
+    )
     L_j = res.supply["L_j"].to_numpy()
     assert np.isnan(L_j).sum() == 1
     assert res.stats["gini_L_j"] == pytest.approx(gini(L_j[~np.isnan(L_j)]))
@@ -150,8 +170,13 @@ def test_the_supply_side_ginis_are_scoped_to_the_open_sites(frames, prep, keep):
     how many candidates were declined, and would let opening any site anywhere look like
     a fairness gain.
     """
-    kwargs = {"modes": SINGLE, "D_max": D_MAX, "tau": TAU, "Q": Q,
-              "stats": ["exposure", "inequality"]}
+    kwargs = {
+        "modes": SINGLE,
+        "D_max": D_MAX,
+        "tau": TAU,
+        "Q": Q,
+        "stats": ["exposure", "inequality"],
+    }
     masked = sfca_e(prep, open_mask=mask_for(frames[1], keep), **kwargs).stats
     reference = sfca_e(restricted(frames, keep), **kwargs).stats
     for key in ("gini_E_j", "gini_L_j"):
@@ -162,8 +187,7 @@ def test_the_supply_side_ginis_are_scoped_to_the_open_sites(frames, prep, keep):
 def test_closed_sites_would_otherwise_dominate_the_coefficient(frames, prep):
     """The bug this scoping avoids, made explicit on the toy network."""
     mask = mask_for(frames[1], ["s1", "s2"])
-    res = sfca_e(prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q, open_mask=mask,
-                 stats=["exposure"])
+    res = sfca_e(prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q, open_mask=mask, stats=["exposure"])
     E_j = res.supply["E_j"].to_numpy()
     assert (E_j[~mask] == 0).all()
     assert res.stats["gini_E_j"] == pytest.approx(gini(E_j[mask]))
@@ -206,9 +230,7 @@ def test_exposure_skips_A_i_and_so_needs_no_capacity(frames, call):
 
 def test_choice_set_alone_computes_neither_exposure_nor_accessibility(prep):
     """Its keys read only ``G_ij``, so both gates stay shut and neither array is built."""
-    res = sfca(
-        prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q, stats=["choice_set"], output=()
-    )
+    res = sfca(prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q, stats=["choice_set"], output=())
     assert res.demand is None and res.supply is None
     assert res.stats["frac_demand_q_binding"] == pytest.approx(5 / 6)
 
@@ -243,19 +265,18 @@ def test_choice_set_available_from_sfca_e(prep):
 def test_coverage_from_sfca_e_uses_its_own_exposure(prep):
     res = sfca_e(prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q, stats=["coverage"])
     assert res.stats["sum_E_j"] == pytest.approx(res.supply["E_j"].sum())
-    assert res.stats["demand_capture_rate"] == pytest.approx(
-        res.stats["sum_E_j"] / sum(P.values())
-    )
+    assert res.stats["demand_capture_rate"] == pytest.approx(res.stats["sum_E_j"] / sum(P.values()))
 
 
 @pytest.mark.parametrize(
     ("call", "match"),
     [
-        (lambda p: catchment(p, modes=SINGLE, D_max=D_MAX, stats=["choice_set"]),
-         "catchment has none"),
+        (
+            lambda p: catchment(p, modes=SINGLE, D_max=D_MAX, stats=["choice_set"]),
+            "catchment has none",
+        ),
         (lambda p: voronoi(p, D_max=D_MAX, stats=["choice_set"]), "voronoi has none"),
-        (lambda p: ifca(p, modes=SINGLE, D_max=D_MAX, stats=["choice_set"]),
-         "ifca has none"),
+        (lambda p: ifca(p, modes=SINGLE, D_max=D_MAX, stats=["choice_set"]), "ifca has none"),
     ],
 )
 def test_choice_set_raises_where_there_is_no_choice_set(prep, call, match):
@@ -274,8 +295,13 @@ def test_stats_are_none_unless_requested(prep):
 
 def test_stats_work_without_assembling_frames(prep):
     res = sfca(
-        prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=Q,
-        stats=["coverage"], output=(),
+        prep,
+        modes=SINGLE,
+        D_max=D_MAX,
+        tau=TAU,
+        Q=Q,
+        stats=["coverage"],
+        output=(),
     )
     assert res.demand is None and res.supply is None
     assert res.stats["n_pairs_used"] == 10

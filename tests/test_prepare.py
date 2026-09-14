@@ -49,9 +49,9 @@ def test_segment_prefix_rows_takes_the_first_k_of_each_segment(big):
     seg = _core.segment_starts(codes, n_groups)
     rng = np.random.default_rng(1)
     k = np.minimum(_core.segment_lengths(seg), rng.integers(0, 4, size=n_groups))
-    expected = np.concatenate(
-        [np.arange(seg[g], seg[g] + k[g]) for g in range(n_groups)]
-    ).astype(np.int64)
+    expected = np.concatenate([np.arange(seg[g], seg[g] + k[g]) for g in range(n_groups)]).astype(
+        np.int64
+    )
     np.testing.assert_array_equal(_core.segment_prefix_rows(seg, k), expected)
 
 
@@ -77,10 +77,7 @@ def test_segment_rank_desc_matches_pandas(big):
     codes, values, n_groups = big
     seg = _core.segment_starts(codes, n_groups)
     expected = (
-        pd.Series(values)
-        .groupby(pd.Series(codes))
-        .rank(method="first", ascending=False)
-        .to_numpy()
+        pd.Series(values).groupby(pd.Series(codes)).rank(method="first", ascending=False).to_numpy()
         - 1
     )
     np.testing.assert_array_equal(_core.segment_rank_desc(values, codes, seg), expected)
@@ -182,5 +179,7 @@ def test_validation_rejects_duplicate_pairs(frames):
 
 
 def test_validate_false_skips_checks(frames):
-    demand_df, supply_df, cost_df = _mutate(frames, "demand", lambda d: d.__setitem__("demand", -1.0))
+    demand_df, supply_df, cost_df = _mutate(
+        frames, "demand", lambda d: d.__setitem__("demand", -1.0)
+    )
     assert prepare(demand_df, supply_df, cost_df, validate=False).n_demand == 6

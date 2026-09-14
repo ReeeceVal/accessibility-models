@@ -106,7 +106,11 @@ def _reject_baked(modes: Sequence[Mode] | None, D_max: float, tau: float) -> Non
     """A Compiled already fixes stages 0-5; repeating them here would be ignored."""
     baked = [
         name
-        for name, given in (("modes", modes is not None), ("D_max", D_max != np.inf), ("tau", tau != 0.0))
+        for name, given in (
+            ("modes", modes is not None),
+            ("D_max", D_max != np.inf),
+            ("tau", tau != 0.0),
+        )
         if given
     ]
     if baked:
@@ -122,7 +126,10 @@ def _reject_bare(stats: Sequence[str] | None, output: Sequence[str], bare: bool)
         return
     conflicting = [
         name
-        for name, given in (("stats", stats is not None), ("output", tuple(output) != _DEFAULT_OUTPUT))
+        for name, given in (
+            ("stats", stats is not None),
+            ("output", tuple(output) != _DEFAULT_OUTPUT),
+        )
         if given
     ]
     if conflicting:
@@ -270,14 +277,12 @@ def _resolve(
         if open_set is None:
             open_set = first.sites
         sel = _select_compiled(first, Q, open_mask)
-        return (first.prep, sel, first.D_max, first.tau, first.n_modes,
-                _n_open(open_set), open_set)
+        return (first.prep, sel, first.D_max, first.tau, first.n_modes, _n_open(open_set), open_set)
 
     prep = _as_prepared(first, supply_df, cost_df, modes, validate)
     sel = _select(prep, modes, D_max, tau, Q, use_impedance, open_mask)
     open_set = _open_set(prep, open_mask)
-    return (prep, sel, D_max, tau, (len(modes) if modes else 0),
-            _n_open(open_set), open_set)
+    return (prep, sel, D_max, tau, (len(modes) if modes else 0), _n_open(open_set), open_set)
 
 
 def _select(
@@ -487,8 +492,16 @@ def catchment(
         bool(modes) and any(mode.decay is not None for mode in modes)
     )
     prep, sel, D_max, tau, n_modes, n_open, open_set = _resolve(
-        prep, supply_df, cost_df, modes=modes, D_max=D_max, tau=tau, Q=None,
-        use_impedance=use_impedance, open_mask=open_mask, validate=validate,
+        prep,
+        supply_df,
+        cost_df,
+        modes=modes,
+        D_max=D_max,
+        tau=tau,
+        Q=None,
+        use_impedance=use_impedance,
+        open_mask=open_mask,
+        validate=validate,
     )
     params = {
         "D_max": D_max,
@@ -515,8 +528,16 @@ def catchment(
         demand_cols = {"A_i": A_i, "SPAR": _spar(A_i), "n_supply_i": _n_supply_i(sel)}
 
     return _finish(
-        prep, params, output, demand_cols, supply_cols,
-        stats=stats, n_pairs_used=sel.n_pairs, seg=sel.seg, family="catchment", open_set=open_set,
+        prep,
+        params,
+        output,
+        demand_cols,
+        supply_cols,
+        stats=stats,
+        n_pairs_used=sel.n_pairs,
+        seg=sel.seg,
+        family="catchment",
+        open_set=open_set,
     )
 
 
@@ -638,9 +659,16 @@ def voronoi(
         demand_cols = {"A_i": A_i, "SPAR": _spar(A_i), "n_supply_i": n_supply_i}
 
     return _finish(
-        prep, params, output, demand_cols, supply_cols,
-        stats=stats, n_pairs_used=star_rows.size,
-        seg=_core.segment_starts(assigned, prep.n_demand), family="voronoi", open_set=open_set,
+        prep,
+        params,
+        output,
+        demand_cols,
+        supply_cols,
+        stats=stats,
+        n_pairs_used=star_rows.size,
+        seg=_core.segment_starts(assigned, prep.n_demand),
+        family="voronoi",
+        open_set=open_set,
     )
 
 
@@ -734,8 +762,16 @@ def ifca(
         raise ValueError("ifca requires modes=[...]; it is undefined without impedance")
 
     prep, sel, D_max, tau, n_modes, n_open, open_set = _resolve(
-        prep, supply_df, cost_df, modes=modes, D_max=D_max, tau=tau, Q=Q,
-        use_impedance=True, open_mask=open_mask, validate=validate,
+        prep,
+        supply_df,
+        cost_df,
+        modes=modes,
+        D_max=D_max,
+        tau=tau,
+        Q=Q,
+        use_impedance=True,
+        open_mask=open_mask,
+        validate=validate,
     )
     S = _require_capacity(prep, "the iFCA family (S_j is in the denominator)")
     params = {
@@ -753,7 +789,9 @@ def ifca(
     demand_cols = supply_cols = None
     if bare or "supply" in output or needs_E_j(stats):
         # r_i is 0, not inf, for unreached nodes: they contribute nothing to any C_j.
-        r_contrib = np.divide(prep.P, supply_within_reach, out=np.zeros(prep.n_demand), where=reached)
+        r_contrib = np.divide(
+            prep.P, supply_within_reach, out=np.zeros(prep.n_demand), where=reached
+        )
         C_j = _core.group_sum(sel.supply_code, r_contrib[sel.demand_code] * sel.f, prep.n_supply)
         E_j = S * C_j
         if bare:
@@ -777,8 +815,17 @@ def ifca(
 
     G = _selection_probability(sel) if _wants_choice_set(stats) and _q_is_set(Q) else None
     return _finish(
-        prep, params, output, demand_cols, supply_cols,
-        stats=stats, n_pairs_used=sel.n_pairs, seg=sel.seg, family="ifca", G=G, open_set=open_set,
+        prep,
+        params,
+        output,
+        demand_cols,
+        supply_cols,
+        stats=stats,
+        n_pairs_used=sel.n_pairs,
+        seg=sel.seg,
+        family="ifca",
+        G=G,
+        open_set=open_set,
     )
 
 
@@ -868,8 +915,16 @@ def sfca(
         raise ValueError("sfca requires a finite Q >= 1; G_ij is defined over C_Q(i)")
 
     prep, sel, D_max, tau, n_modes, n_open, open_set = _resolve(
-        prep, supply_df, cost_df, modes=modes, D_max=D_max, tau=tau, Q=Q,
-        use_impedance=True, open_mask=open_mask, validate=validate,
+        prep,
+        supply_df,
+        cost_df,
+        modes=modes,
+        D_max=D_max,
+        tau=tau,
+        Q=Q,
+        use_impedance=True,
+        open_mask=open_mask,
+        validate=validate,
     )
     G = _selection_probability(sel)
     drawn = prep.P[sel.demand_code] * G * sel.f
@@ -900,8 +955,17 @@ def sfca(
         demand_cols = {"A_i": A_i, "SPAR": _spar(A_i), "n_supply_i": _n_supply_i(sel)}
 
     return _finish(
-        prep, params, output, demand_cols, supply_cols,
-        stats=stats, n_pairs_used=sel.n_pairs, seg=sel.seg, family="sfca", G=G, open_set=open_set,
+        prep,
+        params,
+        output,
+        demand_cols,
+        supply_cols,
+        stats=stats,
+        n_pairs_used=sel.n_pairs,
+        seg=sel.seg,
+        family="sfca",
+        G=G,
+        open_set=open_set,
     )
 
 
@@ -1005,8 +1069,16 @@ def sfca_e(
         raise ValueError("sfca_e requires a finite Q >= 1; G_ij is defined over C_Q(i)")
 
     prep, sel, D_max, tau, n_modes, n_open, open_set = _resolve(
-        prep, supply_df, cost_df, modes=modes, D_max=D_max, tau=tau, Q=Q,
-        use_impedance=True, open_mask=open_mask, validate=validate,
+        prep,
+        supply_df,
+        cost_df,
+        modes=modes,
+        D_max=D_max,
+        tau=tau,
+        Q=Q,
+        use_impedance=True,
+        open_mask=open_mask,
+        validate=validate,
     )
     G = _selection_probability(sel)
     Phi_i = _core.segment_max(sel.f, sel.seg)
@@ -1044,6 +1116,15 @@ def sfca_e(
         }
 
     return _finish(
-        prep, params, output, demand_cols, supply_cols,
-        stats=stats, n_pairs_used=sel.n_pairs, seg=sel.seg, family="sfca_e", G=G, open_set=open_set,
+        prep,
+        params,
+        output,
+        demand_cols,
+        supply_cols,
+        stats=stats,
+        n_pairs_used=sel.n_pairs,
+        seg=sel.seg,
+        family="sfca_e",
+        G=G,
+        open_set=open_set,
     )

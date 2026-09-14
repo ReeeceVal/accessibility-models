@@ -41,9 +41,7 @@ OWN_COL = [
 
 SITES = list(S)
 SUBSETS = [
-    subset
-    for size in range(1, len(SITES) + 1)
-    for subset in itertools.combinations(SITES, size)
+    subset for size in range(1, len(SITES) + 1) for subset in itertools.combinations(SITES, size)
 ]
 
 #: (label, model, extra kwargs, modes) — every family that accepts a Compiled.
@@ -73,21 +71,21 @@ def same(got, want, exact, label):
         if exact:
             np.testing.assert_array_equal(a, b, err_msg=f"{label} {frame}.{column}")
         else:
-            np.testing.assert_allclose(a, b, rtol=1e-12, atol=0.0,
-                                       err_msg=f"{label} {frame}.{column}")
+            np.testing.assert_allclose(
+                a, b, rtol=1e-12, atol=0.0, err_msg=f"{label} {frame}.{column}"
+            )
 
 
-@pytest.mark.parametrize(("label", "model", "extra", "modes"), CASES,
-                         ids=[c[0] for c in CASES])
+@pytest.mark.parametrize(("label", "model", "extra", "modes"), CASES, ids=[c[0] for c in CASES])
 def test_compiled_reproduces_the_uncompiled_call(frames, prep, label, model, extra, modes):
     exact = all(m.cost == "cost_default" for m in modes)
     comp = compile_f(prep, modes=modes, D_max=D_MAX, tau=TAU)
-    same(model(comp, **extra), model(prep, modes=modes, D_max=D_MAX, tau=TAU, **extra),
-         exact, label)
+    same(
+        model(comp, **extra), model(prep, modes=modes, D_max=D_MAX, tau=TAU, **extra), exact, label
+    )
 
 
-@pytest.mark.parametrize(("label", "model", "extra", "modes"), CASES,
-                         ids=[c[0] for c in CASES])
+@pytest.mark.parametrize(("label", "model", "extra", "modes"), CASES, ids=[c[0] for c in CASES])
 def test_compiled_reproduces_the_uncompiled_call_under_every_mask(
     frames, prep, label, model, extra, modes
 ):
@@ -127,8 +125,7 @@ def test_sites_bakes_a_permanent_restriction(frames, prep):
 
 def test_open_mask_must_be_a_subset_of_sites(frames, prep):
     supply_df = frames[1]
-    comp = compile_f(prep, modes=MAC, D_max=D_MAX, tau=TAU,
-                     sites=mask_for(supply_df, ["s1", "s2"]))
+    comp = compile_f(prep, modes=MAC, D_max=D_MAX, tau=TAU, sites=mask_for(supply_df, ["s1", "s2"]))
     # narrowing within the compiled sites is fine
     assert sfca_e(comp, Q=2, open_mask=mask_for(supply_df, ["s1"])).params["n_open"] == 1
     with pytest.raises(ValueError, match="subset of the sites"):
@@ -155,8 +152,14 @@ def test_parameters_baked_into_the_compile_are_rejected(prep, kwargs, match):
 def test_params_come_from_the_compile(prep):
     comp = compile_f(prep, modes=MAC, D_max=D_MAX, tau=TAU)
     params = sfca_e(comp, Q=2).params
-    assert params == {"D_max": D_MAX, "Q": 2, "tau": TAU, "n_modes": 2, "n_open": None,
-                      "n_width_fallback": None}
+    assert params == {
+        "D_max": D_MAX,
+        "Q": 2,
+        "tau": TAU,
+        "n_modes": 2,
+        "n_open": None,
+        "n_width_fallback": None,
+    }
 
 
 def test_voronoi_rejects_a_compiled(prep):
@@ -189,8 +192,7 @@ def test_stats_survive_the_compiled_path(prep):
     want = sfca_e(prep, modes=MAC, D_max=D_MAX, tau=TAU, Q=2, stats=groups, output=())
     assert got.stats.keys() == want.stats.keys()
     for key in got.stats:
-        np.testing.assert_allclose(got.stats[key], want.stats[key], rtol=1e-12,
-                                   err_msg=key)
+        np.testing.assert_allclose(got.stats[key], want.stats[key], rtol=1e-12, err_msg=key)
 
 
 def test_sweep_accepts_a_compiled(prep):
@@ -200,8 +202,9 @@ def test_sweep_accepts_a_compiled(prep):
     assert rows["Q"].tolist() == [1, 2, 3]
     assert (rows["n_modes"] == 2).all()
 
-    want = sweep(prep, "sfca_e", modes=MAC, D_max=D_MAX, tau=TAU,
-                 grid={"Q": [1, 2, 3]}, stats=["coverage"])
+    want = sweep(
+        prep, "sfca_e", modes=MAC, D_max=D_MAX, tau=TAU, grid={"Q": [1, 2, 3]}, stats=["coverage"]
+    )
     np.testing.assert_allclose(rows["demand_capture_rate"], want["demand_capture_rate"])
 
 

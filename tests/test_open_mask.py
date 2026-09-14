@@ -32,9 +32,7 @@ OWN_COL = [
 SITES = list(S)
 #: Every non-empty subset of the four supply points.
 SUBSETS = [
-    subset
-    for size in range(1, len(SITES) + 1)
-    for subset in itertools.combinations(SITES, size)
+    subset for size in range(1, len(SITES) + 1) for subset in itertools.combinations(SITES, size)
 ]
 
 
@@ -84,7 +82,8 @@ def test_open_mask_matches_a_restricted_reprepare(frames, prep, label, model, kw
             assert got[site] == 0.0, (label, keep, site)
 
         np.testing.assert_array_equal(
-            masked.demand["A_i"].to_numpy(), reference.demand["A_i"].to_numpy(),
+            masked.demand["A_i"].to_numpy(),
+            reference.demand["A_i"].to_numpy(),
             err_msg=f"{label} {keep}",
         )
         np.testing.assert_array_equal(
@@ -101,8 +100,9 @@ def test_q_takes_the_top_q_open_not_the_open_of_the_top_q(frames, prep):
     s1 and s2: with Q=2 the choice set must fall back to s3, not come up empty.
     """
     supply_df = frames[1]
-    res = sfca_e(prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=2,
-                 open_mask=mask_for(supply_df, ["s3", "s4"]))
+    res = sfca_e(
+        prep, modes=SINGLE, D_max=D_MAX, tau=TAU, Q=2, open_mask=mask_for(supply_df, ["s3", "s4"])
+    )
     d1 = dict(zip(res.demand["demand_id"], res.demand["n_supply_i"], strict=True))
     assert d1["d1"] == 1
     exposure = dict(zip(res.supply["supply_id"], res.supply["E_j"], strict=True))
@@ -113,15 +113,12 @@ def test_mask_is_reported_in_params(frames, prep):
     supply_df = frames[1]
     kwargs = {"modes": MAC, "D_max": D_MAX, "tau": TAU, "Q": 2}
     assert sfca_e(prep, **kwargs).params["n_open"] is None
-    assert sfca_e(prep, open_mask=mask_for(supply_df, ["s1", "s3"]), **kwargs).params[
-        "n_open"
-    ] == 2
+    assert sfca_e(prep, open_mask=mask_for(supply_df, ["s1", "s3"]), **kwargs).params["n_open"] == 2
 
 
 def test_all_closed_gives_an_empty_network(frames, prep):
     supply_df = frames[1]
-    res = sfca_e(prep, modes=MAC, D_max=D_MAX, tau=TAU, Q=2,
-                 open_mask=mask_for(supply_df, []))
+    res = sfca_e(prep, modes=MAC, D_max=D_MAX, tau=TAU, Q=2, open_mask=mask_for(supply_df, []))
     assert res.supply["E_j"].to_numpy().tolist() == [0.0] * len(SITES)
     assert res.demand["Phi_i"].to_numpy().tolist() == [0.0] * res.demand.shape[0]
     assert res.demand["n_supply_i"].to_numpy().tolist() == [0] * res.demand.shape[0]

@@ -172,9 +172,7 @@ def validate_inputs(
         _validate_modes(demand_df, cost_df, modes)
 
 
-def _validate_modes(
-    demand_df: pd.DataFrame, cost_df: pd.DataFrame, modes: Sequence[Mode]
-) -> None:
+def _validate_modes(demand_df: pd.DataFrame, cost_df: pd.DataFrame, modes: Sequence[Mode]) -> None:
     total = np.zeros(demand_df.shape[0], dtype=np.float64)
     for mode in modes:
         if isinstance(mode.share, str):
@@ -269,11 +267,7 @@ def prepare(
         for name in _numeric_columns(demand_df, {_DEMAND_ID})
     }
 
-    S = (
-        supply_df[_CAPACITY].to_numpy(dtype=np.float64)
-        if _CAPACITY in supply_df.columns
-        else None
-    )
+    S = supply_df[_CAPACITY].to_numpy(dtype=np.float64) if _CAPACITY in supply_df.columns else None
 
     return Prepared(
         demand_df=demand_df,

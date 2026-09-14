@@ -36,9 +36,7 @@ OWN_COL = [
 SITES = list(S)
 #: Every non-empty subset of the four supply points.
 SUBSETS = [
-    subset
-    for size in range(1, len(SITES) + 1)
-    for subset in itertools.combinations(SITES, size)
+    subset for size in range(1, len(SITES) + 1) for subset in itertools.combinations(SITES, size)
 ]
 
 #: (label, model, extra kwargs, modes) — every family that can supply a finite Q.

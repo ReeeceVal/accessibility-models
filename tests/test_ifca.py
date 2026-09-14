@@ -117,9 +117,7 @@ def test_unreached_node_gets_infinite_r_and_zero_access(prep):
 def test_r_i_is_the_reciprocal_of_a_i(prep):
     res = ifca(prep, modes=SINGLE, D_max=D_MAX, tau=TAU)
     reached = res.demand["A_i"] > 0
-    np.testing.assert_allclose(
-        res.demand.loc[reached, "r_i"], 1.0 / res.demand.loc[reached, "A_i"]
-    )
+    np.testing.assert_allclose(res.demand.loc[reached, "r_i"], 1.0 / res.demand.loc[reached, "A_i"])
 
 
 def test_exposure_of_an_unreached_site_is_zero(prep):
