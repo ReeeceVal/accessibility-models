@@ -52,10 +52,8 @@ $$
 \sum_j E_j = \sum_i P_i \max_{j \in \mathbf{C_Q}(i)} f^{multi}_{ij}
 $$
 
-This is the classical **facility-location function** — monotone non-decreasing and
-submodular in the site set — so a greedy site-selection heuristic carries the standard
-`(1 − 1/e)` approximation guarantee. Opening a site can only raise a node's maximum, never
-lower it.
+This is the classical **facility-location function**: monotone non-decreasing and
+submodular in the site set. Opening a site can only raise a node's maximum, never lower it.
 
 Contrast 3SFCA, whose per-node total is `Σ_j G_ij f_ij`, the *contraharmonic mean* of the
 same impedances. Adding an option below that mean drags it down.

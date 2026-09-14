@@ -32,8 +32,7 @@ enough to sit inside a site-selection optimisation loop.
 * **Exact fast paths.** `open_mask`, `width=` and `bare=True` speed up optimisation loops
   and match the reference computation bit for bit, not just within a tolerance.
 * **An objective fit for optimisation.** MAC-3SFCA-E's total exposure is monotone and
-  submodular in the site set, so greedy selection carries the classical `(1 − 1/e)`
-  guarantee.
+  submodular in the site set.
 * **Library, not framework.** No I/O and no orchestration: three DataFrames in, two
   DataFrames out. Typed, tested on Python 3.10–3.13, and depends only on numpy and pandas.
 
