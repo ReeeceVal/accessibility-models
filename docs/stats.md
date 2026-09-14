@@ -121,10 +121,10 @@ touching the demand side.
 ### `gini_E_j` vs `gini_L_j`
 
 `gini_E_j` asks how unevenly demand lands **across sites**; `gini_L_j` asks how unevenly it
-lands **per unit of capacity**, which is the operational reading — a site with five units of capacity
-is expected to absorb more than one with a single unit. `G_ij` is capacity-blind, so
-`gini_E_j` alone cannot see that. Under `sfca_e()` the pair are the natural equity term to
-set against `sum_E_j`: maximise the total, minimise the concentration.
+lands **per unit of capacity**, which is the operational reading — a site with five units of
+capacity is expected to absorb more than one with a single unit. `G_ij` is capacity-blind,
+so `gini_E_j` alone cannot see that. Under `sfca_e()` the pair are the natural equity term
+to set against `sum_E_j`: maximise the total, minimise the concentration.
 
 `gini_L_j` is the one key in this group that reads `capacity`. It returns `NaN` without the
 column rather than raising, so the group stays usable on supply frames that have none.

@@ -48,8 +48,8 @@ functions see.
 
 ## Identifiers
 
-IDs are held as `str` where they are `str`. Zero-padded codes carry leading zeros that numeric parsing
-silently drops, so never let such an ID become an `int64`.
+IDs are held as `str` where they are `str`. Zero-padded codes carry leading zeros that
+numeric parsing silently drops, so never let such an ID become an `int64`.
 
 `prepare()` factorises identifiers to `int32` codes immediately, so the string columns only
 exist at the boundary. Codes follow input row order: `demand_code == i` refers to

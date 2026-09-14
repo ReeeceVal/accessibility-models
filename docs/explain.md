@@ -26,9 +26,9 @@ im.explain(prep, family="sfca", supply_id="s1", modes=modes, D_max=45, tau=0.01,
 2        d2        s1          15.0  0.539746  0.420278
 ```
 
-`demand_id` is the "click a demand node, see the ranked list of sites it reaches" view an interactive
-drill-down needs; `supply_id` is "click a site, see which demand nodes it pulls, and how
-strongly" -- the two views a network decision needs on either side of a pair.
+`demand_id` is the "click a demand node, see the ranked list of sites it reaches" view an
+interactive drill-down needs; `supply_id` is "click a site, see which demand nodes it pulls,
+and how strongly" -- the two views a network decision needs on either side of a pair.
 
 ## Signature
 

@@ -116,8 +116,8 @@ def _supply_ginis(prep: Prepared, E_j: np.ndarray, open_set: np.ndarray | None) 
 
     ``gini_E_j`` asks how unevenly demand lands across sites; ``gini_L_j`` asks how
     unevenly it lands per unit of capacity, which is the operational reading — a site with
-    five units of capacity is expected to absorb more than one with a single unit, and only ``L_j``
-    accounts for that. ``G_ij`` is capacity-blind, so ``gini_E_j`` alone cannot see it.
+    five units of capacity is expected to absorb more than one with a single unit, and only
+    ``L_j`` accounts for that. ``G_ij`` is capacity-blind, so ``gini_E_j`` alone cannot see it.
 
     Closed sites are excluded rather than counted as zero. A Gini is a concentration
     measure, so padding it with zeros inflates it directly: counting the sites a network

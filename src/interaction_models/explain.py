@@ -3,8 +3,8 @@
 Every model family sums per-pair terms into a demand-node or supply-point aggregate and
 discards the individual values -- that is what keeps a call over 10-100M pairs cheap.
 ``explain()`` recovers them, scoped by exactly one of ``demand_id`` or ``supply_id``:
-the "click a node, see its choice set" panel and the "click a site, see who it pulls"
-view an interactive drill-down needs.
+the "click a node, see its choice set" and "click a site, see who it pulls" views an
+interactive drill-down needs.
 
 The two axes are not symmetric under the hood. ``Prepared``/``Compiled`` are sorted by
 demand only, so a ``demand_id`` query is a bounded segment slice, while a ``supply_id``
@@ -286,9 +286,9 @@ def explain(
 
     Every family reduces ``C_D(i)`` (or ``C_Q(i)``) to a single ``A_i`` and ``E_j``.
     ``explain()`` stops one step earlier and returns the surviving pairs themselves --
-    what an interactive drill-down needs for "this node reaches these sites, in this order, with this much
-    weight on each" (``demand_id``) or "this site is reached by these nodes, this
-    strongly" (``supply_id``). Exactly one of the two must be given.
+    what an interactive drill-down needs for "this node reaches these sites, in this order,
+    with this much weight on each" (``demand_id``) or "this site is reached by these nodes,
+    this strongly" (``supply_id``). Exactly one of the two must be given.
 
     A ``demand_id`` query only ever reads the named node(s)' own segment, since
     Prepared/Compiled are already sorted that way. A ``supply_id`` query pays a one-shot

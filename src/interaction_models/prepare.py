@@ -238,8 +238,8 @@ def prepare(
 
     Notes
     -----
-    Identifiers are held as ``str`` where they are ``str`` (zero-padded codes carry leading zeros)
-    and exist only at this boundary; everything downstream is ``int32`` codes.
+    Identifiers are held as ``str`` where they are ``str`` (zero-padded codes keep their
+    leading zeros) and exist only at this boundary; everything downstream is ``int32`` codes.
     """
     if validate:
         validate_inputs(demand_df, supply_df, cost_df, modes)

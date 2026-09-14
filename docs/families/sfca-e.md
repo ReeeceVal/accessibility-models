@@ -41,8 +41,8 @@ $$
 with `R_j = S_j / E_j` retained as a diagnostic, exactly as in 3SFCA.
 
 Capacity never influences **selection**. It enters only through `L_j` and `R_j`, which is
-the modelling claim: people choose a site, not a unit of capacity, and capacity then determines how
-much load each unit at that site carries.
+the modelling claim: people choose a site, not a unit of capacity within it, and capacity
+then determines how much load each unit at that site carries.
 
 ## Why the total is monotone
 
@@ -94,9 +94,9 @@ demand_id  demand      A_i     SPAR    Phi_i  n_supply_i  pv_share  mbt_share
        d3    50.0 0.003493 0.108253 0.089495           1      0.25       0.75
 ```
 
-Read `Φ_i` directly: `d1` sits five minutes from `s1` on the primary transport mode, so 97% of it
-participates. `d3` is 30 minutes from its only option and mostly reliant on the secondary transport mode,
-so under 9% does.
+Read `Φ_i` directly: `d1` sits five minutes from `s1` on the primary transport mode, so 97%
+of it participates. `d3` is 30 minutes from its only option and mostly reliant on the
+secondary transport mode, so under 9% does.
 
 `s2` draws marginally more total exposure than `s1` (128.1 against 122.2) but carries
 **more than twice the per-unit load** (25.6 against 12.2), because it has half the
